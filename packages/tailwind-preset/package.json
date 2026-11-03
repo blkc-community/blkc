@@ -1,0 +1,64 @@
+{
+  "name": "@blkc-code/tailwind-preset",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tailwind preset and theme tokens for BLKC Blocks, Kits and Circuits",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./blkc.css": "./blkc.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "blkc.css"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/build-css.mjs",
+    "build:watch": "tsc -w",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "build:css": "node scripts/build-css.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^9.14.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "blkc",
+    "tailwind",
+    "tailwindcss",
+    "preset",
+    "design-tokens"
+  ],
+  "author": "Black Code Enterprises LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blkc-community/blkc.git",
+    "directory": "packages/tailwind-preset"
+  },
+  "bugs": {
+    "url": "https://github.com/blkc-community/blkc/issues"
+  },
+  "homepage": "https://blkc.community",
+  "publishConfig": {
+    "access": "public"
+  }
+}
