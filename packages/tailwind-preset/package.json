@@ -17,7 +17,9 @@
   "files": [
     "dist",
     "src",
-    "blkc.css"
+    "blkc.css",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
   ],
   "scripts": {
     "build": "tsc && node scripts/build-css.mjs",
