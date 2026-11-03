@@ -11,10 +11,6 @@
  * @author Black Code Enterprises LLC
  */
 
-// Load environment variables from .env file if present
-import { config } from "dotenv";
-config();
-
 // Import and run the CLI
 import { run } from "../dist/index.js";
 
