@@ -25,8 +25,6 @@ export default [
         ecmaFeatures: {
           jsx: true,
         },
-        project: path.join(__dirname, 'tsconfig.json'),
-        tsconfigRootDir: __dirname,
       },
       globals: {
         React: 'readonly',

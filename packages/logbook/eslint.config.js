@@ -13,14 +13,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '!**/*.test.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
-        project: path.join(__dirname, 'tsconfig.json'),
-        tsconfigRootDir: __dirname,
       },
       globals: {
         process: 'readonly',
@@ -46,6 +44,40 @@ export default [
       'prefer-const': 'error',
       'no-var': 'error',
       'no-useless-escape': 'off',
+    },
+  },
+  {
+    files: ['**/*.test.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        NodeJS: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        vi: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': ts,
+    },
+    rules: {
+      ...ts.configs['recommended'].rules,
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      'no-var': 'error',
     },
   },
   {

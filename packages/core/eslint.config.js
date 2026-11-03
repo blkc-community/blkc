@@ -13,15 +13,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.ts'],
-    ignores: ['**/*.test.ts'],
+    files: ['**/*.ts', '!**/*.test.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
-        project: path.join(__dirname, 'tsconfig.json'),
-        tsconfigRootDir: __dirname,
       },
       globals: {
         process: 'readonly',
