@@ -55,7 +55,6 @@ A shared, hash-chained audit trail that records all changes across Sites, boards
 ## Documentation
 
 - [v2 Specification](docs/v2-spec.md) - Complete technical specification
-- [Architecture](docs/ARCHITECTURE.md) - Design decisions and rationale
 - [API Reference](docs/API.md) - Public API documentation
 
 ## Development
@@ -96,7 +95,6 @@ blkc/
 │   └── cli/            # CLI tools
 ├── docs/
 │   ├── v2-spec.md      # Complete v2 specification
-│   ├── ARCHITECTURE.md # Architecture decisions
 │   └── API.md          # API documentation
 ├── LICENSE             # Apache-2.0
 ├── README.md
