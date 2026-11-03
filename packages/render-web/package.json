@@ -1,0 +1,75 @@
+{
+  "name": "@blkc-code/render-web",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "React/Next.js compatible web renderer for BLKC UI Blocks",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc -w",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@blkc-code/core": "*",
+    "react": ">=19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "peerDependencies": {
+    "next": ">=16.4.0",
+    "react": ">=19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^9.14.0",
+    "eslint-plugin-react": "^7.22.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "blkc",
+    "renderer",
+    "react",
+    "nextjs",
+    "ui-blocks",
+    "website-builder"
+  ],
+  "author": "Black Code Enterprises LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blkc-community/blkc.git",
+    "directory": "packages/render-web"
+  },
+  "bugs": {
+    "url": "https://github.com/blkc-community/blkc/issues"
+  },
+  "homepage": "https://blkc.community",
+  "publishConfig": {
+    "access": "public"
+  }
+}

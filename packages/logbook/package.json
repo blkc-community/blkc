@@ -1,0 +1,67 @@
+{
+  "name": "@blkc-code/logbook",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Hash-chained audit trail implementation for BLKC",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "bin": {
+    "blkc-logbook": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc -w",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@blkc-code/core": "*",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "blkc",
+    "logbook",
+    "audit-trail",
+    "hash-chain",
+    "immutable"
+  ],
+  "author": "Black Code Enterprises LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blkc-community/blkc.git",
+    "directory": "packages/logbook"
+  },
+  "bugs": {
+    "url": "https://github.com/blkc-community/blkc/issues"
+  },
+  "homepage": "https://blkc.community"
+}

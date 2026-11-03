@@ -1,0 +1,62 @@
+{
+  "name": "@blkc-code/blkc",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "BLKC - Black Code Market's open-source framework for building websites and workflows with Blocks, Kits, and Circuits",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:all": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces",
+    "test:all": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces",
+    "lint:all": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prepublish": "npm run build:all && npm run lint:all && npm run test:all",
+    "clean": "npm run clean --workspaces --if-present",
+    "doc": "echo 'typedoc not configured - add typedoc@^0.26.0 for API docs' || true",
+    "prepare": "npm run build:all"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "blkc",
+    "blocks",
+    "kits",
+    "circuits",
+    "logbook",
+    "website-builder",
+    "visual-builder",
+    "headless-cms"
+  ],
+  "author": "Black Code Enterprises LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blkc-community/blkc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blkc-community/blkc/issues"
+  },
+  "homepage": "https://blkc.community",
+  "dependencies": {
+    "@blkc-code/core": "^0.1.0",
+    "@blkc-code/render-web": "^0.1.0",
+    "@eslint/config-array": "^0.23.5",
+    "@eslint/eslintrc": "^3.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "@typescript-eslint/type-utils": "^8.72.1",
+    "@typescript-eslint/utils": "^8.72.1",
+    "eslint": "^10.14.0",
+    "minimatch": "^11.0.4",
+    "vite": "^6.4.5"
+  }
+}
