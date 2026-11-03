@@ -120,6 +120,58 @@ export function blkcCssVariables(
 }
 
 // ---------------------------------------------------------------------------
+// Tailwind v4 theme (CSS-first)
+// ---------------------------------------------------------------------------
+
+/**
+ * Utility name -> BLKC token. Tailwind v4 has no JS preset, so the semantic
+ * utilities the renderer emits (`bg-primary`, `text-muted-foreground`,
+ * `rounded-blkc`, ...) are declared as a `@theme inline` block instead.
+ */
+const utilityTheme: ReadonlyArray<readonly [utility: string, token: keyof BlkcThemeTokens]> = [
+  ["--color-primary", "--blkc-color-primary"],
+  ["--color-primary-foreground", "--blkc-color-background"],
+  ["--color-secondary", "--blkc-color-secondary"],
+  ["--color-secondary-foreground", "--blkc-color-background"],
+  ["--color-background", "--blkc-color-background"],
+  ["--color-foreground", "--blkc-color-text"],
+  ["--color-muted", "--blkc-color-background"],
+  ["--color-muted-foreground", "--blkc-color-text-secondary"],
+  ["--color-border", "--blkc-color-border"],
+  ["--color-input", "--blkc-color-border"],
+  ["--color-accent", "--blkc-color-primary"],
+  ["--color-accent-foreground", "--blkc-color-background"],
+  ["--color-ring", "--blkc-color-primary"],
+  ["--radius-blkc", "--blkc-border-radius"],
+  ["--container-blkc", "--blkc-max-width"],
+  ["--font-blkc", "--blkc-font-family"],
+  ["--shadow-blkc", "--blkc-shadow-md"],
+  ["--shadow-blkc-sm", "--blkc-shadow-sm"],
+  ["--shadow-blkc-lg", "--blkc-shadow-lg"],
+  ["--spacing-blkc-xs", "--blkc-spacing-xs"],
+  ["--spacing-blkc-sm", "--blkc-spacing-sm"],
+  ["--spacing-blkc-md", "--blkc-spacing-md"],
+  ["--spacing-blkc-lg", "--blkc-spacing-lg"],
+  ["--spacing-blkc-xl", "--blkc-spacing-xl"],
+];
+
+/**
+ * Render the Tailwind v4 `@theme inline` block.
+ *
+ * `inline` matters: it makes each utility resolve through the CSS variable
+ * instead of copying the value, so overriding a token in `:root` rethemes the
+ * utilities too.
+ */
+export function blkcThemeCss(overrides: BlkcThemeOverrides = {}): string {
+  const theme = resolveBlkcTheme(overrides);
+  const declarations = utilityTheme
+    .map(([utility, token]) => `  ${utility}: var(${token}, ${theme[token]});`)
+    .join("\n");
+
+  return `@theme inline {\n${declarations}\n}\n`;
+}
+
+// ---------------------------------------------------------------------------
 // Tailwind preset
 // ---------------------------------------------------------------------------
 
