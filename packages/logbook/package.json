@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/logbook",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "Hash-chained audit trail implementation for BLKC",
   "main": "dist/index.js",
@@ -18,7 +18,7 @@
     "src"
   ],
   "bin": {
-    "blkc-logbook": "./dist/cli.js"
+    "blkc-logbook": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -31,7 +31,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@blkc-code/core": "*",
+    "@blkc-code/core": "^0.1.0",
     "fs-extra": "^11.2.0"
   },
   "devDependencies": {
@@ -57,7 +57,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/blkc-community/blkc.git",
+    "url": "git+https://github.com/blkc-community/blkc.git",
     "directory": "packages/logbook"
   },
   "bugs": {

@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/render-web",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "React/Next.js compatible web renderer for BLKC UI Blocks",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@blkc-code/core": "*",
+    "@blkc-code/core": "^0.1.0",
     "react": ">=19.3.0",
     "react-dom": "^19.3.0"
   },
@@ -62,7 +62,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/blkc-community/blkc.git",
+    "url": "git+https://github.com/blkc-community/blkc.git",
     "directory": "packages/render-web"
   },
   "bugs": {

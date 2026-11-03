@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/core",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "BLKC core schemas and types for Blocks, Kits, Circuits, and Logbook",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/blkc-community/blkc.git",
+    "url": "git+https://github.com/blkc-community/blkc.git",
     "directory": "packages/core"
   },
   "bugs": {
