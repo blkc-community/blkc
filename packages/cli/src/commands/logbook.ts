@@ -76,7 +76,7 @@ function setupCheckCommand(program: Command): void {
       // Delegate to verify
       const verifyCmd = program.commands.find((c) => c.name() === "verify");
       if (verifyCmd) {
-        await (verifyCmd.action as (filePath: string, options: Record<string, unknown>) => Promise<void>)(filePath, {});
+        await (verifyCmd.action as unknown as (filePath: string, options: Record<string, unknown>) => Promise<void>)(filePath, {});
       }
     });
 }
