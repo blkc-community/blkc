@@ -26,8 +26,49 @@ npm run build
 |---------|-------------|--------|
 | [`@blkc-code/core`](packages/core) | Zod schemas for Blocks, Kits, Circuits, Logbook | ✅ Stable |
 | [`@blkc-code/render-web`](packages/render-web) | React/Next.js compatible web renderer | 🚧 In Development |
+| [`@blkc-code/tailwind-preset`](packages/tailwind-preset) | Tailwind preset and theme tokens for the renderer | ✅ Stable |
 | [`@blkc-code/logbook`](packages/logbook) | Hash-chained audit trail implementation | ✅ Stable |
 | [`@blkc-code/cli`](packages/cli) | BLKC developer CLI tools | ✅ Stable |
+
+## Styling
+
+The renderer emits Tailwind utility classes, so there is no bespoke CSS to maintain. Add the preset and you get BLKC's design tokens as Tailwind classes:
+
+```ts
+// tailwind.config.ts (Tailwind v3)
+import blkcPreset from "@blkc-code/tailwind-preset";
+
+export default {
+  presets: [blkcPreset],
+  content: ["./src/**/*.{ts,tsx}"],
+};
+```
+
+```css
+/* Tailwind v4 */
+@import "tailwindcss";
+@import "@blkc-code/tailwind-preset/blkc.css";
+
+/* Retheme a Kit or a single site without touching component code */
+:root {
+  --blkc-color-primary: #0066cc;
+  --blkc-radius: 0.75rem;
+}
+```
+
+Every token is a CSS custom property, so a Kit or a single site can retheme the whole page by overriding variables — `primary`, `secondary`, `foreground`, `muted-foreground`, `border`, `accent`, `ring`, plus `border-radius-blkc`, `max-w-blkc` and the `p-blkc-*` spacing scale.
+
+### Rendering HTML (server only)
+
+`renderPage()` renders React elements and works anywhere. Static HTML output needs `react-dom/server`, so it lives in a separate entry point:
+
+```ts
+import { renderToHTML, generateHtmlDocument } from "@blkc-code/render-web/server";
+
+const { html, success } = renderToHTML(blocks);
+const page = generateHtmlDocument(blocks, { title: "My site" });
+```
+
 
 ## Concepts
 
@@ -55,7 +96,6 @@ A shared, hash-chained audit trail that records all changes across Sites, boards
 ## Documentation
 
 - [v2 Specification](docs/v2-spec.md) - Complete technical specification
-- [API Reference](docs/API.md) - Public API documentation
 
 ## Development
 
@@ -89,13 +129,13 @@ npm run typecheck
 ```
 blkc/
 ├── packages/
-│   ├── core/           # Zod schemas and types
-│   ├── render-web/     # Web renderer (React/Next.js)
-│   ├── logbook/        # Audit trail implementation
-│   └── cli/            # CLI tools
+│   ├── core/            # Zod schemas and types
+│   ├── render-web/      # Web renderer (React/Next.js)
+│   ├── tailwind-preset/ # Tailwind preset and theme tokens
+│   ├── logbook/         # Audit trail implementation
+│   └── cli/             # CLI tools
 ├── docs/
-│   ├── v2-spec.md      # Complete v2 specification
-│   └── API.md          # API documentation
+│   └── v2-spec.md       # Complete v2 specification
 ├── LICENSE             # Apache-2.0
 ├── README.md
 └── package.json        # Workspace root

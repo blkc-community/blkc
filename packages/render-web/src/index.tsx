@@ -25,7 +25,6 @@ import {
   BlockProps, 
   RenderOptions, 
   RenderResult, 
-  RenderToHtmlResult,
   ThemeVariables,
   DEFAULT_THEME,
   HeroProps,
@@ -62,13 +61,16 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
     minHeight,
   } = p;
 
-  const alignClass = utils.getTextAlignmentClass(textAlign);
-  const textColorClass = utils.getColorClass(textColor);
-  const bgColorClass = utils.getBackgroundColorClass(backgroundColor);
+  const textAlignClass =
+    textAlign === "left" ? "text-left items-start" : textAlign === "right" ? "text-right items-end" : "text-center items-center";
 
   return (
     <section
-      className={clsx("blkc-hero", alignClass, textColorClass, bgColorClass, className)}
+      className={clsx(
+        "blkc-hero relative flex w-full flex-col items-center justify-center gap-6 px-4 py-16",
+        textAlignClass,
+        className,
+      )}
       style={{
         padding,
         minHeight,
@@ -77,39 +79,41 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
         ...style,
       }}
     >
-      <div className="blkc-hero-content">
-        {image && (
-          <div
-            className={clsx("blkc-hero-image", `blkc-hero-image-${image.position || "top"}`)}
-          >
-            <img
-              src={image.src}
-              alt={image.alt || heading}
-              className="blkc-hero-img"
-            />
-          </div>
-        )}
-        
-        <div className="blkc-hero-text">
-          <h1 className="blkc-hero-heading">{heading}</h1>
-          {subheading && (
-            <p className="blkc-hero-subheading">{subheading}</p>
-          )}
-          
-          {cta && (
-            <a
-              href={utils.normalizeUrl(cta.href)}
-              className={clsx(
-                "blkc-button",
-                `blkc-button-${cta.variant || "primary"}`
-              )}
-              target={cta.target || "_self"}
-              rel={cta.target === "_blank" ? "noopener noreferrer" : undefined}
-            >
-              {cta.label}
-            </a>
-          )}
+      {image && (
+        <div className="w-full max-w-5xl">
+          <img
+            src={image.src}
+            alt={image.alt || heading}
+            className="h-auto w-full rounded-lg object-cover"
+          />
         </div>
+      )}
+
+      <div className="flex max-w-3xl flex-col gap-4">
+        <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+          {heading}
+        </h1>
+        {subheading && (
+          <p className="text-lg text-muted-foreground sm:text-xl">{subheading}</p>
+        )}
+
+        {cta && (
+          <a
+            href={utils.normalizeUrl(cta.href)}
+            className={clsx(
+              "inline-flex items-center justify-center rounded-md px-6 py-3 text-base font-semibold transition-colors",
+              cta.variant === "secondary"
+                ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                : cta.variant === "outline"
+                  ? "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90",
+            )}
+            target={cta.target || "_self"}
+            rel={cta.target === "_blank" ? "noopener noreferrer" : undefined}
+          >
+            {cta.label}
+          </a>
+        )}
       </div>
     </section>
   );
@@ -132,11 +136,14 @@ function TextBlock({ props: p, className, style }: BlockProps<TextProps>): React
     padding,
   } = p;
 
-  const textColorClass = utils.getColorClass(color);
-  const bgColorClass = utils.getBackgroundColorClass(backgroundColor);
-  const fontSizeClass = utils.getFontSizeClass(fontSize);
-  const fontWeightClass = utils.getFontWeightClass(fontWeight);
-  const alignClass = utils.getTextAlignmentClass(textAlign);
+  const alignClass =
+    textAlign === "left"
+      ? "text-left"
+      : textAlign === "right"
+        ? "text-right"
+        : textAlign === "center"
+          ? "text-center"
+          : undefined;
 
   // Security: If tag is not a safe element, default to div
   const safeTag = ["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)
@@ -146,15 +153,7 @@ function TextBlock({ props: p, className, style }: BlockProps<TextProps>): React
 
   return (
     <SafeTag
-      className={clsx(
-        "blkc-text",
-        textColorClass,
-        bgColorClass,
-        fontSizeClass,
-        fontWeightClass,
-        alignClass,
-        className
-      )}
+      className={clsx("blkc-text leading-relaxed", alignClass, className)}
       style={{
         margin,
         padding,
@@ -187,14 +186,19 @@ function ImageBlock({ props: p, className, style }: BlockProps<ImageProps>): Rea
     alignment = "center",
   } = p;
 
-  const alignClass = utils.getAlignmentClass(alignment);
+  const alignClass =
+    alignment === "left"
+      ? "mr-auto"
+      : alignment === "right"
+        ? "ml-auto"
+        : "mx-auto";
   const imageUrl = utils.normalizeUrl(src);
 
   const imageElement = (
     <img
       src={imageUrl}
       alt={alt}
-      className="blkc-image-img"
+      className="blkc-image-img block h-auto max-w-full"
       style={{
         width: width || "100%",
         height: height || "auto",
@@ -208,7 +212,7 @@ function ImageBlock({ props: p, className, style }: BlockProps<ImageProps>): Rea
   const content = link ? (
     <a
       href={utils.normalizeUrl(link)}
-      className="blkc-image-link"
+      className="blkc-image-link inline-block"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -219,16 +223,14 @@ function ImageBlock({ props: p, className, style }: BlockProps<ImageProps>): Rea
   );
 
   return (
-    <div
-      className={clsx("blkc-image", alignClass, className)}
-    >
-      <div className="blkc-image-wrapper">
-        {content}
-      </div>
+    <figure className={clsx("blkc-image flex w-full flex-col gap-2", alignClass, className)}>
+      <div className="blkc-image-wrapper w-full">{content}</div>
       {caption && (
-        <figcaption className="blkc-image-caption">{caption}</figcaption>
+        <figcaption className="blkc-image-caption text-sm text-muted-foreground">
+          {caption}
+        </figcaption>
       )}
-    </div>
+    </figure>
   );
 }
 
@@ -248,19 +250,31 @@ function ButtonBlock({ props: p, className, style }: BlockProps<ButtonProps>): R
     iconPosition = "left",
   } = p;
 
-  const alignClass = utils.getAlignmentClass(alignment);
   const hrefUrl = utils.normalizeUrl(href);
   const isExternal = utils.isExternalUrl(hrefUrl);
 
+  const sizeClass =
+    size === "sm" ? "px-3 py-1.5 text-sm" : size === "lg" ? "px-6 py-3 text-lg" : "px-4 py-2 text-base";
+  const variantClass =
+    variant === "secondary"
+      ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+      : variant === "outline"
+        ? "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+        : variant === "ghost"
+          ? "hover:bg-accent hover:text-accent-foreground"
+          : variant === "link"
+            ? "text-primary underline-offset-4 hover:underline"
+            : "bg-primary text-primary-foreground hover:bg-primary/90";
+
   return (
-    <div className={clsx("blkc-button-wrapper", alignClass)}>
+    <div className={clsx("flex", alignment === "left" ? "justify-start" : alignment === "right" ? "justify-end" : "justify-center")}>
       <a
         href={hrefUrl || "#"}
         className={clsx(
-          "blkc-button",
-          `blkc-button-${variant}`,
-          `blkc-button-${size}`,
-          className
+          "blkc-button inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+          sizeClass,
+          variantClass,
+          className,
         )}
         style={style}
         target={target}
@@ -292,17 +306,15 @@ function SectionBlock({ props: p, className, style, children }: BlockProps<Secti
     alignment = "center",
   } = p;
 
-  const alignClass = utils.getAlignmentClass(alignment);
-  const textColorClass = utils.getColorClass(textColor);
-  const bgColorClass = utils.getBackgroundColorClass(backgroundColor);
+  const widthClass =
+    alignment === "wide" ? "w-full max-w-blkc" : alignment === "full" ? "w-full" : "w-full";
 
   return (
     <section
       className={clsx(
-        "blkc-section",
-        alignClass,
-        textColorClass,
-        bgColorClass,
+        "blkc-section text-foreground",
+        widthClass,
+        alignment === "wide" && "mx-auto",
         className
       )}
       style={{
@@ -314,7 +326,9 @@ function SectionBlock({ props: p, className, style, children }: BlockProps<Secti
         ...style,
       }}
     >
-      <div className="blkc-section-content">{children}</div>
+      <div className="blkc-section-content mx-auto flex w-full max-w-blkc flex-col gap-6">
+        {children}
+      </div>
     </section>
   );
 }
@@ -392,33 +406,33 @@ function renderBlock(
   }
 
   const { component: Component } = entry;
-  const mergedTheme = utils.mergeTheme(theme);
+
+  // Only caller-supplied overrides are emitted, as inline custom properties.
+  // The full default theme belongs in one stylesheet (getGlobalCSS, or the
+  // Tailwind preset), not repeated inside every Block on the page.
+  const themeStyle =
+    theme && Object.keys(theme).length > 0
+      ? (theme as unknown as React.CSSProperties)
+      : undefined;
 
   try {
-    const element = (
-      <React.Fragment>
-        {/* Theme CSS variables */}
-        <style>{`
-          ${utils.themeToCss(mergedTheme)}
-        `}</style>
-        
-        {Wrapper ? (
-          <Wrapper className={wrapperClassName}>
-            <Component
-              props={props}
-              className={passThroughClassName ? wrapperClassName : undefined}
-            />
-          </Wrapper>
-        ) : (
-          <div className={wrapperClassName}>
-            <Component
-              props={props}
-              className={passThroughClassName ? wrapperClassName : undefined}
-            />
-          </div>
-        )}
-      </React.Fragment>
+    const rendered = Wrapper ? (
+      <Wrapper className={wrapperClassName}>
+        <Component
+          props={props}
+          className={passThroughClassName ? wrapperClassName : undefined}
+        />
+      </Wrapper>
+    ) : (
+      <div className={wrapperClassName}>
+        <Component
+          props={props}
+          className={passThroughClassName ? wrapperClassName : undefined}
+        />
+      </div>
     );
+
+    const element = themeStyle ? <div style={themeStyle}>{rendered}</div> : rendered;
 
     return {
       element,
@@ -473,335 +487,48 @@ function renderPage(
   ))}</div>;
 }
 
-// ============================================================================
-// HTML Rendering (for SSG and static export)
-// ============================================================================
-
-/**
- * Render a Block to HTML string.
- * Uses React's renderToStaticMarkup for static HTML generation.
- */
-function renderBlockToHTML(
-  instance: BlockInstance,
-  options: RenderOptions = {}
-): RenderToHtmlResult {
-  // Import dynamically to avoid SSR issues
-  const ReactDOMServer = require("react-dom/server");
-  
-  const result = renderBlock(instance, options);
-  
-  if (!result.success || !result.element) {
-    return {
-      html: "",
-      success: false,
-      error: result.error,
-      renderedBlocks: [],
-    };
-  }
-
-  try {
-    const html = ReactDOMServer.renderToStaticMarkup(result.element);
-    return {
-      html,
-      success: true,
-      renderedBlocks: [result.blockId],
-    };
-  } catch (error) {
-    return {
-      html: "",
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-      renderedBlocks: [],
-    };
-  }
-}
-
-/**
- * Render multiple Blocks to HTML string.
- */
-function renderBlocksToHTML(
-  instances: BlockInstance[],
-  options: RenderOptions = {}
-): RenderToHtmlResult {
-  // Import dynamically to avoid SSR issues
-  const ReactDOMServer = require("react-dom/server");
-  
-  const { elements, results } = renderBlocks(instances, options);
-  const renderedBlocks = results.map((r) => r.blockId);
-  const hasErrors = results.some((r) => !r.success);
-
-  if (hasErrors) {
-    const errorMessages = results
-      .filter((r) => !r.success)
-      .map((r) => r.error)
-      .join("; ");
-    
-    return {
-      html: "",
-      success: false,
-      error: errorMessages,
-      renderedBlocks,
-    };
-  }
-
-  try {
-    const html = ReactDOMServer.renderToStaticMarkup(
-      <div className="blkc-page">{elements.map((element, index) => (
-        <React.Fragment key={index}>{element}</React.Fragment>
-      ))}</div>
-    );
-    return {
-      html,
-      success: true,
-      renderedBlocks,
-    };
-  } catch (error) {
-    return {
-      html: "",
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-      renderedBlocks,
-    };
-  }
-}
-
-/**
- * Render a page (array of Block instances) to HTML string.
- * This is the primary function for static site generation (NFR17-18).
- */
-function renderToHTML(
-  instances: BlockInstance[],
-  options: RenderOptions = {}
-): RenderToHtmlResult {
-  return renderBlocksToHTML(instances, options);
-}
-
-// ============================================================================
 // Global CSS
 // ============================================================================
 
 /**
- * Generate global CSS for BLKC Blocks.
- * This can be included in the head of the HTML document.
+ * Generate the minimal stylesheet BLKC needs when Tailwind is not in use.
+ *
+ * The renderer styles Blocks with Tailwind utilities (see
+ * `@blkc-code/tailwind-preset`), so this is not a component stylesheet: it is
+ * the reset, the theme variables and the few layout defaults a page needs to be
+ * readable without Tailwind. Anything Block-specific belongs in the Block's own
+ * classes, not here — duplicated rules would fight the utilities instead of
+ * complementing them.
  */
 function getGlobalCSS(theme: ThemeVariables = DEFAULT_THEME): string {
   const mergedTheme = utils.mergeTheme(theme);
-  
+
   return `
-/* BLKC Reset and Base Styles */
-.blkc-block {
+/* BLKC base styles (Tailwind-free fallback) */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--blkc-font-family, system-ui, sans-serif);
+  font-size: var(--blkc-font-size-base, 1rem);
+  line-height: 1.6;
+  color: var(--blkc-color-text, #1a1a1a);
+  background-color: var(--blkc-color-background, #ffffff);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
 }
 
 .blkc-page {
   display: flex;
   flex-direction: column;
   gap: var(--blkc-spacing-md, 1rem);
-}
-
-/* Alignment */
-.blkc-align-left { align-self: flex-start; }
-.blkc-align-center { align-self: center; }
-.blkc-align-right { align-self: flex-end; }
-.blkc-align-wide { max-width: var(--blkc-max-width, 1200px); margin-left: auto; margin-right: auto; }
-.blkc-align-full { width: 100%; }
-
-.blkc-text-left { text-align: left; }
-.blkc-text-center { text-align: center; }
-.blkc-text-right { text-align: right; }
-
-/* Hero */
-.blkc-hero {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 100%;
-}
-
-.blkc-hero-content {
-  display: flex;
-  flex-direction: column;
-  max-width: var(--blkc-max-width, 1200px);
-  margin: 0 auto;
-  width: 100%;
-}
-
-.blkc-hero-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--blkc-spacing-md, 1rem);
-  padding: var(--blkc-spacing-md, 1rem);
-}
-
-.blkc-hero-heading {
-  font-size: var(--blkc-font-size-3xl, 2.5rem);
-  font-weight: var(--blkc-font-weight-bold, 700);
-  line-height: 1.2;
-  margin: 0;
-}
-
-.blkc-hero-subheading {
-  font-size: var(--blkc-font-size-lg, 1.25rem);
-  opacity: 0.8;
-  margin: 0;
-}
-
-.blkc-hero-image {
-  width: 100%;
-}
-
-.blkc-hero-image-top { order: -1; }
-.blkc-hero-image-bottom { order: 1; }
-.blkc-hero-image-left { align-self: flex-start; max-width: 50%; }
-.blkc-hero-image-right { align-self: flex-end; max-width: 50%; }
-
-.blkc-hero-img {
-  width: 100%;
-  height: auto;
-  object-fit: cover;
-  border-radius: var(--blkc-border-radius, 8px);
-}
-
-/* Text */
-.blkc-text {
-  line-height: 1.6;
-}
-
-.blkc-text-xs { font-size: var(--blkc-font-size-xs, 0.75rem); }
-.blkc-text-sm { font-size: var(--blkc-font-size-sm, 0.875rem); }
-.blkc-text-base { font-size: var(--blkc-font-size-base, 1rem); }
-.blkc-text-lg { font-size: var(--blkc-font-size-lg, 1.25rem); }
-.blkc-text-xl { font-size: var(--blkc-font-size-xl, 1.5rem); }
-.blkc-text-2xl { font-size: var(--blkc-font-size-2xl, 2rem); }
-.blkc-text-3xl { font-size: var(--blkc-font-size-3xl, 2.5rem); }
-
-.blkc-font-normal { font-weight: var(--blkc-font-weight-normal, 400); }
-.blkc-font-bold { font-weight: var(--blkc-font-weight-bold, 700); }
-
-/* Buttons */
-.blkc-button-wrapper {
-  display: flex;
-  justify-content: center;
-}
-
-.blkc-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--blkc-spacing-sm, 0.5rem);
-  padding: 0.75rem 1.5rem;
-  font-size: var(--blkc-font-size-base, 1rem);
-  font-weight: var(--blkc-font-weight-bold, 700);
-  line-height: 1;
-  border-radius: var(--blkc-border-radius, 8px);
-  border: 2px solid transparent;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s ease;
-}
-
-.blkc-button:focus {
-  outline: 2px solid var(--blkc-color-primary, #0066cc);
-  outline-offset: 2px;
-}
-
-.blkc-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.blkc-button-primary {
-  background-color: var(--blkc-color-primary, #0066cc);
-  color: white;
-}
-
-.blkc-button-primary:hover {
-  background-color: ${utils.darkenColor("#0066cc", 10)};
-}
-
-.blkc-button-secondary {
-  background-color: var(--blkc-color-secondary, #6c757d);
-  color: white;
-}
-
-.blkc-button-secondary:hover {
-  background-color: ${utils.darkenColor("#6c757d", 10)};
-}
-
-.blkc-button-outline {
-  background-color: transparent;
-  color: var(--blkc-color-primary, #0066cc);
-  border-color: var(--blkc-color-primary, #0066cc);
-}
-
-.blkc-button-outline:hover {
-  background-color: ${utils.addAlpha("#0066cc", 0.1)};
-}
-
-.blkc-button-ghost {
-  background-color: transparent;
-  color: var(--blkc-color-primary, #0066cc);
-}
-
-.blkc-button-ghost:hover {
-  background-color: ${utils.addAlpha("#0066cc", 0.1)};
-}
-
-.blkc-button-link {
-  background-color: transparent;
-  color: var(--blkc-color-primary, #0066cc);
-  padding: 0;
-  border: none;
-}
-
-.blkc-button-link:hover {
-  text-decoration: underline;
-}
-
-.blkc-button-sm { padding: 0.5rem 1rem; font-size: var(--blkc-font-size-sm, 0.875rem); }
-.blkc-button-lg { padding: 1rem 2rem; font-size: var(--blkc-font-size-lg, 1.25rem); }
-
-.blkc-button-icon {
-  display: flex;
-  align-items: center;
-}
-
-.blkc-button-icon-left { margin-right: var(--blkc-spacing-xs, 0.25rem); }
-.blkc-button-icon-right { margin-left: var(--blkc-spacing-xs, 0.25rem); }
-
-/* Image */
-.blkc-image {
-  display: flex;
-  flex-direction: column;
-  gap: var(--blkc-spacing-sm, 0.5rem);
-}
-
-.blkc-image-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-
-.blkc-image-img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.blkc-image-caption {
-  font-size: var(--blkc-font-size-sm, 0.875rem);
-  color: var(--blkc-color-text-secondary, #6c757d);
-  text-align: center;
-}
-
-.blkc-image-link {
-  display: block;
-  text-decoration: none;
-}
-
-/* Section */
-.blkc-section {
-  width: 100%;
 }
 
 .blkc-section-content {
@@ -813,52 +540,6 @@ function getGlobalCSS(theme: ThemeVariables = DEFAULT_THEME): string {
 /* Theme Variables */
 ${utils.themeToCss(mergedTheme)}
 `;
-}
-
-// ============================================================================
-// Static HTML Export (for SSG)
-// ============================================================================
-
-/**
- * Generate a complete HTML document with rendered Blocks.
- * This is useful for static site generation where you need a full HTML page.
- */
-function generateHtmlDocument(
-  instances: BlockInstance[],
-  options: {
-    title?: string;
-    lang?: string;
-    head?: string;
-    bodyClassName?: string;
-    theme?: ThemeVariables;
-  } = {}
-): string {
-  const { title = "BLKC Page", lang = "en", head = "", bodyClassName = "", theme } = options;
-  const mergedTheme = utils.mergeTheme(theme);
-  
-  // Render Blocks to HTML
-  const renderResult = renderToHTML(instances, { theme: mergedTheme });
-  
-  if (!renderResult.success) {
-    return `<html><body>Error: ${renderResult.error}</body></html>`;
-  }
-
-  // Generate CSS
-  const css = getGlobalCSS(mergedTheme);
-
-  return `<!DOCTYPE html>
-<html lang="${lang}">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
-  <style>${css}</style>
-  ${head}
-</head>
-<body class="${bodyClassName}">
-  ${renderResult.html}
-</body>
-</html>`;
 }
 
 // ============================================================================
@@ -883,12 +564,8 @@ export {
   renderBlock,
   renderBlocks,
   renderPage,
-  renderBlockToHTML,
-  renderBlocksToHTML,
-  renderToHTML,
   
-  // HTML export
-  generateHtmlDocument,
+  // HTML export (string output lives in @blkc-code/render-web/server)
   getGlobalCSS,
   
   // Default theme

@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/logbook",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Hash-chained audit trail implementation for BLKC",
   "main": "dist/index.js",
@@ -17,9 +17,6 @@
     "dist",
     "src"
   ],
-  "bin": {
-    "blkc-logbook": "dist/cli.js"
-  },
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc -w",

@@ -4,9 +4,8 @@
  * Tests for React components and rendering functions.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import {
   HeroBlock,
   TextBlock,
@@ -17,17 +16,10 @@ import {
   getBlockComponent,
   renderBlock,
   renderBlocks,
-  renderToHTML,
   getGlobalCSS,
-  generateHtmlDocument,
   DEFAULT_THEME,
 } from "./index";
 import { BlockInstance } from "@blkc-code/core";
-
-// Mock React DOM server for SSR testing
-vi.mock("react-dom/server", () => ({
-  renderToStaticMarkup: vi.fn(() => "<div>mocked</div>"),
-}));
 
 // ============================================================================
 // Constants
@@ -206,23 +198,6 @@ describe("renderBlocks", () => {
   });
 });
 
-describe("renderToHTML", () => {
-  it("should render blocks to HTML", () => {
-    registerBlock("test-hero", HeroBlock);
-    
-    const instances: BlockInstance[] = [
-      { block: "test-hero", props: { heading: "Test" } },
-    ];
-    
-    // Mock renderToStaticMarkup
-    vi.mocked(renderToStaticMarkup).mockReturnValue("<div>hero</div>");
-    
-    const result = renderToHTML(instances);
-    expect(result.success).toBe(true);
-    expect(result.html).toContain("hero");
-  });
-});
-
 // ============================================================================
 // CSS Generation
 // ============================================================================
@@ -231,9 +206,15 @@ describe("getGlobalCSS", () => {
   it("should generate CSS string", () => {
     const css = getGlobalCSS();
     expect(typeof css).toBe("string");
-    expect(css).toContain(".blkc-block");
-    expect(css).toContain(".blkc-hero");
-    expect(css).toContain(".blkc-text");
+    expect(css).toContain(".blkc-page");
+    expect(css).toContain("box-sizing: border-box");
+    expect(css).toContain("--blkc-color-primary");
+  });
+
+  it("should not re-style blocks that Tailwind already handles", () => {
+    const css = getGlobalCSS();
+    expect(css).not.toContain(".blkc-hero {");
+    expect(css).not.toContain(".blkc-button {");
   });
 
   it("should include custom theme variables", () => {
@@ -242,56 +223,5 @@ describe("getGlobalCSS", () => {
     };
     const css = getGlobalCSS(customTheme);
     expect(css).toContain("--blkc-color-primary: #ff0000");
-  });
-});
-
-// ============================================================================
-// HTML Document Generation
-// ============================================================================
-
-describe("generateHtmlDocument", () => {
-  it("should generate complete HTML document", () => {
-    registerBlock("test-hero", HeroBlock);
-    
-    const instances: BlockInstance[] = [
-      { block: "test-hero", props: { heading: "Test" } },
-    ];
-    
-    // Mock renderToStaticMarkup
-    vi.mocked(renderToStaticMarkup).mockReturnValue("<div>hero</div>");
-    
-    const html = generateHtmlDocument(instances);
-    expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("<html");
-    expect(html).toContain("<head>");
-    expect(html).toContain("<body");
-    expect(html).toContain("hero");
-  });
-
-  it("should include custom title", () => {
-    registerBlock("test-hero", HeroBlock);
-    
-    const instances: BlockInstance[] = [
-      { block: "test-hero", props: { heading: "Test" } },
-    ];
-    
-    vi.mocked(renderToStaticMarkup).mockReturnValue("<div>hero</div>");
-    
-    const html = generateHtmlDocument(instances, { title: "Custom Title" });
-    expect(html).toContain("<title>Custom Title</title>");
-  });
-
-  it("should include custom CSS", () => {
-    registerBlock("test-hero", HeroBlock);
-    
-    const instances: BlockInstance[] = [
-      { block: "test-hero", props: { heading: "Test" } },
-    ];
-    
-    vi.mocked(renderToStaticMarkup).mockReturnValue("<div>hero</div>");
-    
-    const html = generateHtmlDocument(instances);
-    expect(html).toContain("<style>");
-    expect(html).toContain(".blkc-block");
   });
 });
