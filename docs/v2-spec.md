@@ -8,7 +8,7 @@ This document is the executable specification for BLKC v2. The TypeScript schema
 
 ## Overview
 
-BLKC v1 described one thing: **backend AI/data modules (Blocks)** grouped into Kits and Circuits. Black Code Market needs the same vocabulary to describe **websites and trade bundles** too: page sections, themes, default content, and Kanban boards.
+BLKC v1 described one thing: **backend AI/data modules (Blocks)** grouped into Kits and Circuits. v2 adds the same vocabulary for **websites and trade bundles**: page sections, themes, default content, and Kanban boards.
 
 v2 adds this capability **without breaking any v1 manifest**. Every v1 Block parses unchanged as a capability Block.
 
@@ -619,7 +619,5 @@ BLKC follows [Semantic Versioning](https://semver.org/):
 
 ## References
 
-- [BCM Suite Plan](../../../docs/BCM_SUITE_PLAN.md) - Overall product strategy
-- [BCM Suite Architecture](../../../_bmad-output/planning-artifacts/bcm-suite-architecture.md) - Technical architecture
 - [BLKC v1 Documentation](https://github.com/black-code-market/BLKC-MVP) - Original BLKC repo
 - [WordPress theme.json](https://developer.wordpress.org/themes/block/themes/theme-json/) - Theme format reference
