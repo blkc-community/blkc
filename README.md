@@ -58,6 +58,8 @@ export default {
 
 Every token is a CSS custom property, so a Kit or a single site can retheme the whole page by overriding variables — `primary`, `secondary`, `foreground`, `muted-foreground`, `border`, `accent`, `ring`, plus `border-radius-blkc`, `max-w-blkc` and the `p-blkc-*` spacing scale.
 
+Blocks never take class names as props. A Block offers a small set of design choices (`tone`, `size`, `align`) and its component maps them to Tailwind classes; see [Designing a Block](docs/DESIGN.md).
+
 ### Rendering HTML (server only)
 
 `renderPage()` renders React elements and works anywhere. Static HTML output needs `react-dom/server`, so it lives in a separate entry point:
@@ -95,6 +97,7 @@ A shared, hash-chained audit trail that records all changes across Sites, boards
 
 ## Documentation
 
+- [Designing a Block](docs/DESIGN.md) - How a Block communicates its look: design props, Tailwind classes and Kit tokens
 - [v2 Specification](docs/v2-spec.md) - Complete technical specification
 
 ## Development
