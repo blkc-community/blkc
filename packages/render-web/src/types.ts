@@ -204,17 +204,42 @@ export type TextAlign = "left" | "center" | "right";
  */
 export type BlockAlign = "left" | "center" | "right" | "wide" | "full";
 
+/**
+ * Design vocabulary shared by UI Blocks.
+ *
+ * Design is communicated to a Block as a closed set of choices, never as class
+ * strings: the component owns the mapping to Tailwind utilities, so a Block
+ * looks right in every Kit and Tailwind can see every class at build time.
+ */
+export type BlockTone = "default" | "muted" | "accent" | "inverse";
+
+/** Vertical rhythm and type scale. */
+export type BlockSize = "sm" | "md" | "lg";
+
 // ============================================================================
 // Built-in Block Props
 // ============================================================================
 
 /**
  * Props for the Hero Block.
+ *
+ * Content: `eyebrow`, `heading`, `subheading`, `cta`, `secondaryCta`, `image`.
+ * Design: `tone`, `size`, `align`.
+ * Escape hatches: `backgroundColor`, `textColor`, `textAlign`, `padding`,
+ * `minHeight` — inline values that deliberately beat the design vocabulary when
+ * a site needs one Block to differ from its theme.
  */
 export interface HeroProps {
+  eyebrow?: string;
   heading: string;
   subheading?: string;
   cta?: {
+    label: string;
+    href: string;
+    variant?: "primary" | "secondary" | "outline";
+    target?: "_blank" | "_self" | "_parent" | "_top";
+  };
+  secondaryCta?: {
     label: string;
     href: string;
     variant?: "primary" | "secondary" | "outline";
@@ -225,6 +250,9 @@ export interface HeroProps {
     alt: string;
     position?: "left" | "right" | "top" | "bottom";
   };
+  tone?: BlockTone;
+  size?: BlockSize;
+  align?: TextAlign;
   backgroundColor?: string;
   textColor?: string;
   textAlign?: TextAlign;
