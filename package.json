@@ -8,17 +8,17 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "build:all": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/cli",
+    "build:all": "npm run build --if-present -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/cli",
     "test": "npm run test --workspaces",
     "test:all": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces",
     "lint:all": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "prepublish": "npm run build:all && npm run lint:all && npm run test:all",
     "clean": "npm run clean --workspaces --if-present",
     "doc": "echo 'typedoc not configured - add typedoc@^0.26.0 for API docs' || true",
-    "prepare": "npm run build:all"
+    "prepare": "npm run build:all",
+    "prepublishOnly": "npm run build:all && npm run lint:all && npm run test:all"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

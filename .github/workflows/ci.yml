@@ -13,13 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
-        working-directory: blkc
       - run: npm run lint:all
-        working-directory: blkc
       - run: npm run typecheck
-        working-directory: blkc
       - run: npm run build:all
-        working-directory: blkc
       - run: npm run test:all
-        working-directory: blkc
