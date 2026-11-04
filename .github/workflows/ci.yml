@@ -5,8 +5,75 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  blkc:
+  ci:
+    name: CI (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node, bun]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: matrix.runtime == 'node'
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.runtime == 'bun'
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun install
+          else
+            npm ci
+          fi
+
+      - name: Lint
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun run lint:all
+          else
+            npm run lint:all
+          fi
+
+      - name: Typecheck
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun run typecheck
+          else
+            npm run typecheck
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun run build:all
+          else
+            npm run build:all
+          fi
+
+      - name: Test
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun run test:all
+          else
+            npm run test:all
+          fi
+
+  licence:
+    name: Licence check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +82,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint:all
-      - run: npm run typecheck
-      - run: npm run build:all
-      - run: npm run test:all
+      - name: Check licences
+        run: npx --yes license-checker-rseidelsohn --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0"
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

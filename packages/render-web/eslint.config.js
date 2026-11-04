@@ -56,9 +56,12 @@ export default [
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/no-namespace': 'off',
       // General
-      'no-console': 'warn',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['next', 'next/*'], message: 'render-web must not import next/* (FE-5).' }],
+      }],
       'no-useless-escape': 'off',
       'no-redeclare': 'off',
     },
@@ -92,9 +95,12 @@ export default [
       ...react.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-console': 'warn',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['next', 'next/*'], message: 'render-web must not import next/* (FE-5).' }],
+      }],
       'no-useless-escape': 'off',
     },
   },
