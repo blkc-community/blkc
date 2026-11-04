@@ -14,6 +14,7 @@ import ora from "ora";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { KitSchema } from "@blkc-code/core";
+import { validateManifests } from "../manifests.js";
 
 // ============================================================================
 // Command: kit validate
@@ -21,36 +22,19 @@ import { KitSchema } from "@blkc-code/core";
 
 function setupValidateCommand(program: Command): void {
   program
-    .command("validate <manifest-path>")
-    .description("Validate a Kit manifest")
-    .action(async (manifestPath: string) => {
-      const spinner = ora("Validating Kit manifest...").start();
-      
-      try {
-        const absolutePath = path.resolve(process.cwd(), manifestPath);
-        const content = await readFile(absolutePath, { encoding: "utf8" });
-        const manifest = JSON.parse(content);
-        
-        const result = KitSchema.safeParse(manifest);
-        
-        if (!result.success) {
-          spinner.fail("Validation failed");
-          console.error(chalk.red("\nValidation errors:"));
-          for (const issue of result.error.issues) {
-            console.error(`  - ${chalk.red(issue.path.join("."))}: ${issue.message}`);
-          }
-          process.exit(1);
-        }
-        
-        spinner.succeed("Kit manifest is valid");
-        const kit = result.data;
-        console.log(chalk.gray(`\nKit ID: ${kit.id}`));
-        console.log(chalk.gray(`Name: ${kit.name}`));
-        console.log(chalk.gray(`Blocks: ${kit.blocks.length}`));
-      } catch (error) {
-        spinner.fail(`Failed to validate: ${error}`);
-        process.exit(1);
-      }
+    .command("validate <path...>")
+    .description("Validate Kit manifest(s). A directory is searched for manifest.json files.")
+    .action(async (targets: string[]) => {
+      process.exitCode = await validateManifests({
+        kind: "Kit",
+        targets,
+        schema: KitSchema,
+        describe: (kit) => [
+          `Kit ID: ${kit.id}`,
+          `Name: ${kit.name}`,
+          `Blocks: ${kit.blocks.length}`,
+        ],
+      });
     });
 }
 

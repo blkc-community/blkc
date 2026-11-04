@@ -14,6 +14,7 @@ import ora from "ora";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { BlockSchema } from "@blkc-code/core";
+import { validateManifests } from "../manifests.js";
 
 // ============================================================================
 // Command: block validate
@@ -21,37 +22,20 @@ import { BlockSchema } from "@blkc-code/core";
 
 function setupValidateCommand(program: Command): void {
   program
-    .command("validate <manifest-path>")
-    .description("Validate a Block manifest")
-    .action(async (manifestPath: string) => {
-      const spinner = ora("Validating Block manifest...").start();
-      
-      try {
-        const absolutePath = path.resolve(process.cwd(), manifestPath);
-        const content = await readFile(absolutePath, { encoding: "utf8" });
-        const manifest = JSON.parse(content);
-        
-        const result = BlockSchema.safeParse(manifest);
-        
-        if (!result.success) {
-          spinner.fail("Validation failed");
-          console.error(chalk.red("\nValidation errors:"));
-          for (const issue of result.error.issues) {
-            console.error(`  - ${chalk.red(issue.path.join("."))}: ${issue.message}`);
-          }
-          process.exit(1);
-        }
-        
-        spinner.succeed("Block manifest is valid");
-        const block = result.data;
-        console.log(chalk.gray(`\nBlock ID: ${block.id}`));
-        console.log(chalk.gray(`Name: ${block.name}`));
-        console.log(chalk.gray(`Kind: ${block.kind}`));
-        console.log(chalk.gray(`Version: ${block.version}`));
-      } catch (error) {
-        spinner.fail(`Failed to validate: ${error}`);
-        process.exit(1);
-      }
+    .command("validate <path...>")
+    .description("Validate Block manifest(s). A directory is searched for manifest.json files.")
+    .action(async (targets: string[]) => {
+      process.exitCode = await validateManifests({
+        kind: "Block",
+        targets,
+        schema: BlockSchema,
+        describe: (block) => [
+          `Block ID: ${block.id}`,
+          `Name: ${block.name}`,
+          `Kind: ${block.kind}`,
+          `Version: ${block.version}`,
+        ],
+      });
     });
 }
 

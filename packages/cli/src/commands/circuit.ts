@@ -14,6 +14,7 @@ import ora from "ora";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { CircuitSchema } from "@blkc-code/core";
+import { validateManifests } from "../manifests.js";
 
 // ============================================================================
 // Command: circuit validate
@@ -21,38 +22,21 @@ import { CircuitSchema } from "@blkc-code/core";
 
 function setupValidateCommand(program: Command): void {
   program
-    .command("validate <manifest-path>")
-    .description("Validate a Circuit manifest")
-    .action(async (manifestPath: string) => {
-      const spinner = ora("Validating Circuit manifest...").start();
-      
-      try {
-        const absolutePath = path.resolve(process.cwd(), manifestPath);
-        const content = await readFile(absolutePath, { encoding: "utf8" });
-        const manifest = JSON.parse(content);
-        
-        const result = CircuitSchema.safeParse(manifest);
-        
-        if (!result.success) {
-          spinner.fail("Validation failed");
-          console.error(chalk.red("\nValidation errors:"));
-          for (const issue of result.error.issues) {
-            console.error(`  - ${chalk.red(issue.path.join("."))}: ${issue.message}`);
-          }
-          process.exit(1);
-        }
-        
-        spinner.succeed("Circuit manifest is valid");
-        const circuit = result.data;
-        console.log(chalk.gray(`\nCircuit ID: ${circuit.id}`));
-        console.log(chalk.gray(`Name: ${circuit.name}`));
-        console.log(chalk.gray(`Kits: ${circuit.kits.length}`));
-        console.log(chalk.gray(`Boards: ${circuit.boards.length}`));
-        console.log(chalk.gray(`Capabilities: ${circuit.capabilities.length}`));
-      } catch (error) {
-        spinner.fail(`Failed to validate: ${error}`);
-        process.exit(1);
-      }
+    .command("validate <path...>")
+    .description("Validate Circuit manifest(s). A directory is searched for manifest.json files.")
+    .action(async (targets: string[]) => {
+      process.exitCode = await validateManifests({
+        kind: "Circuit",
+        targets,
+        schema: CircuitSchema,
+        describe: (circuit) => [
+          `Circuit ID: ${circuit.id}`,
+          `Name: ${circuit.name}`,
+          `Kits: ${circuit.kits.length}`,
+          `Boards: ${circuit.boards.length}`,
+          `Capabilities: ${circuit.capabilities.length}`,
+        ],
+      });
     });
 }
 
