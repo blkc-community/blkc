@@ -38,7 +38,7 @@ export default [
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       // General
-      'no-console': 'warn',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
       'no-useless-escape': 'off', // We have intentional escapes in regex
@@ -64,7 +64,7 @@ export default [
       ...ts.configs['recommended'].rules,
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-console': 'warn',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
       'no-useless-escape': 'off',
