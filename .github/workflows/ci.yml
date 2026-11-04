@@ -53,7 +53,7 @@ jobs:
       - name: Build
         run: |
           if [ "${{ matrix.runtime }}" = "bun" ]; then
-            bun --cwd packages/core run build
+            (cd packages/core && bun run build)
             bun run build:all
           else
             npm run build --workspace=packages/core
