@@ -35,7 +35,9 @@ jobs:
       - name: Install dependencies
         run: |
           if [ "${{ matrix.runtime }}" = "bun" ]; then
-            bun install
+            # --ignore-scripts: skip the root 'prepare' script, which runs build:all
+            # during install before workspace deps are linked. The Build step handles it.
+            bun install --ignore-scripts
           else
             npm ci
           fi
@@ -83,7 +85,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Check licences
-        run: npx --yes license-checker-rseidelsohn --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0"
+        # The root package is private (UNLICENSED by design) and must be excluded.
+        run: npx --yes license-checker-rseidelsohn --excludePrivatePackages --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;LGPL-2.1-or-later;LGPL-3.0-or-later;CC-BY-4.0"
 
   secrets:
     name: Secret scan
@@ -92,6 +95,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks/gitleaks-action requires a licence key for organisation accounts,
+      # so run the (free, open-source) CLI directly instead. Same tool, same rules.
+      - name: Install gitleaks
+        run: |
+          VERSION=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Secret scan
+        run: gitleaks detect --source . --verbose --redact --exit-code 1
