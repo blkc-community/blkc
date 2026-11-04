@@ -50,20 +50,20 @@ jobs:
             npm run lint:all
           fi
 
-      - name: Typecheck
-        run: |
-          if [ "${{ matrix.runtime }}" = "bun" ]; then
-            bun run typecheck
-          else
-            npm run typecheck
-          fi
-
       - name: Build
         run: |
           if [ "${{ matrix.runtime }}" = "bun" ]; then
             bun run build:all
           else
             npm run build:all
+          fi
+
+      - name: Typecheck
+        run: |
+          if [ "${{ matrix.runtime }}" = "bun" ]; then
+            bun run typecheck
+          else
+            npm run typecheck
           fi
 
       - name: Test
