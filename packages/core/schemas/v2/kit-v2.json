@@ -98,9 +98,7 @@
                     "properties": {
                       "slug": {
                         "type": "string",
-                        "minLength": 3,
-                        "maxLength": 64,
-                        "pattern": "^[a-z0-9\\-]+$"
+                        "pattern": "^[a-z0-9-]+$"
                       },
                       "name": {
                         "type": "string"
@@ -123,9 +121,7 @@
                     "properties": {
                       "slug": {
                         "type": "string",
-                        "minLength": 3,
-                        "maxLength": 64,
-                        "pattern": "^[a-z0-9\\-]+$"
+                        "pattern": "^[a-z0-9-]+$"
                       },
                       "name": {
                         "type": "string"
@@ -153,9 +149,7 @@
                     "properties": {
                       "slug": {
                         "type": "string",
-                        "minLength": 3,
-                        "maxLength": 64,
-                        "pattern": "^[a-z0-9\\-]+$"
+                        "pattern": "^[a-z0-9-]+$"
                       },
                       "name": {
                         "type": "string"
@@ -178,9 +172,7 @@
                     "properties": {
                       "slug": {
                         "type": "string",
-                        "minLength": 3,
-                        "maxLength": 64,
-                        "pattern": "^[a-z0-9\\-]+$"
+                        "pattern": "^[a-z0-9-]+$"
                       },
                       "name": {
                         "type": "string"
@@ -208,9 +200,7 @@
                     "properties": {
                       "slug": {
                         "type": "string",
-                        "minLength": 3,
-                        "maxLength": 64,
-                        "pattern": "^[a-z0-9\\-]+$"
+                        "pattern": "^[a-z0-9-]+$"
                       },
                       "name": {
                         "type": "string"

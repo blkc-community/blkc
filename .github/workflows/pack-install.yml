@@ -1,0 +1,62 @@
+name: Pack and install
+
+# Proves what a user gets: the CLI tarball, installed with each package manager
+# into an empty project, with no workspace to lean on.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Tarball (${{ matrix.manager }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [npm, pnpm, bun]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.manager == 'bun'
+      - if: matrix.manager == 'pnpm'
+        run: npm install --global pnpm@9
+
+      - run: npm ci --ignore-scripts
+      - name: Build the CLI
+        run: |
+          npm run build --workspace=packages/core
+          npm run build --workspace=packages/logbook
+          npm run build --workspace=packages/cli
+      - name: Pack
+        run: npm pack --workspace=packages/cli --pack-destination "$RUNNER_TEMP"
+
+      - name: Install into an empty project and run it
+        env:
+          MANAGER: ${{ matrix.manager }}
+        run: |
+          TARBALL=$(echo "$RUNNER_TEMP"/blkc-code-cli-*.tgz)
+          WANT=$(node -p "require('./packages/cli/package.json').version")
+          PROJECT="$RUNNER_TEMP/project"
+          mkdir "$PROJECT" && cd "$PROJECT"
+          echo '{"name":"pack-smoke","private":true}' > package.json
+          case "$MANAGER" in
+            npm)  npm install "$TARBALL";      BLKC="npx blkc" ;;
+            pnpm) pnpm add "$TARBALL";         BLKC="pnpm exec blkc" ;;
+            bun)  bun add "$TARBALL";          BLKC="bunx blkc" ;;
+          esac
+          test "$($BLKC --version)" = "$WANT"
+          $BLKC new block hero-demo
+          $BLKC new kit kit-demo
+          $BLKC new kit pixel-office
+          grep -q "Press Start 2P" kits/pixel-office/kit.json
+          $BLKC new circuit circuit-demo
+          $BLKC check
+          node --test

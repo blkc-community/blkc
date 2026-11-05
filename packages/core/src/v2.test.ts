@@ -11,10 +11,10 @@ import {
   AttributeTypeSchema,
   compileAttributes,
   parseAny,
+  ManifestError,
   parseAnyBlock,
   parseAnyKit,
   parseAnyCircuit,
-  BlockSchema,
   BlockV2Schema,
   KitV2Schema,
   CircuitV2Schema,
@@ -304,5 +304,77 @@ describe("§17 compatibility", () => {
   it("ManifestVersionSchema accepts 1 and 2", () => {
     expect(ManifestVersionSchema.safeParse(1).success).toBe(true);
     expect(ManifestVersionSchema.safeParse(2).success).toBe(true);
+  });
+});
+
+describe("UI Blocks written with attributes (D3, D4)", () => {
+  const block = {
+    manifestVersion: 2,
+    kind: "ui",
+    id: "hero",
+    name: "Hero",
+    summary: "s",
+    description: "d",
+    version: "1.0.0",
+    attributes: {
+      heading: { type: "string", required: true, label: "Heading" },
+      align: { type: "string", enum: ["left", "center"], group: "style" },
+      items: { type: "list" },
+    },
+    example: { heading: "Hi" },
+  };
+
+  it("derives props, controls and the default renderer", () => {
+    const { value } = parseAnyBlock(block);
+    if (value.kind !== "ui") throw new Error("expected a UI Block");
+    expect(value.props.required).toEqual(["heading"]);
+    expect(value.controls.map((c) => [c.prop, c.control])).toEqual([["heading", "text"], ["align", "select"]]);
+    expect(value.renderers.web?.package).toBe("./render.web.tsx");
+    expect(value.attributes?.["heading"]?.type).toBe("string");
+  });
+
+  it("enforces required attributes against the example", () => {
+    expect(() => parseAnyBlock({ ...block, example: {} })).toThrow(/heading/);
+  });
+
+  it("reports structured issues with codes and fields", () => {
+    const rest = { ...block, summary: undefined };
+    try {
+      parseAnyBlock({ ...rest, attributes: { heading: { type: "nope" } } });
+      throw new Error("should not parse");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ManifestError);
+      expect((error as ManifestError).issues[0]).toMatchObject({ code: "BLKC-E108", field: "attributes.heading.type" });
+    }
+    try {
+      parseAnyBlock(rest);
+      throw new Error("should not parse");
+    } catch (error) {
+      expect((error as ManifestError).issues[0]).toMatchObject({ code: "BLKC-E101", field: "summary" });
+    }
+  });
+
+  it("the published authoring schema accepts the same manifest", () => {
+    expect(BlockV2Schema.safeParse(block).success).toBe(true);
+  });
+
+  it("accepts a canvas renderer, the reserved target", () => {
+    const { value } = parseAnyBlock({ ...block, renderers: { canvas: { package: "x", export: "y" } } });
+    if (value.kind !== "ui") throw new Error("expected a UI Block");
+    expect(value.renderers.canvas?.export).toBe("y");
+  });
+});
+
+describe("richtext attributes and theme presets", () => {
+  it("richtext accepts TipTap JSON and an HTML string, and nothing else", () => {
+    const { zodSchema } = compileAttributes({ body: { type: "richtext", required: true } });
+    expect(zodSchema.safeParse({ body: { type: "doc", content: [] } }).success).toBe(true);
+    expect(zodSchema.safeParse({ body: "<p>x</p>" }).success).toBe(true);
+    expect(zodSchema.safeParse({ body: 3 }).success).toBe(false);
+  });
+
+  it("theme presets accept short slugs such as md", () => {
+    const palette = [{ slug: "md", name: "Medium", size: "1rem" }];
+    expect(ThemeV2Schema.safeParse({ settings: { spacing: { spacingSizes: palette } } }).success).toBe(true);
   });
 });
