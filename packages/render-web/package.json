@@ -18,6 +18,7 @@
       "require": "./dist/server.js"
     },
     "./styles.css": "./dist/styles.css",
+    "./theme.css": "./src/theme.css",
     "./fixtures/*.json": "./fixtures/*.json",
     "./fixtures/*.html": "./fixtures/*.html"
   },

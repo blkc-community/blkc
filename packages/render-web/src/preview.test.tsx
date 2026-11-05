@@ -130,16 +130,14 @@ describe("styles.css", () => {
   const css = "dist/styles.css";
 
   it("maps the same tokens as the Tailwind preset", () => {
-    const source = readFileSync("src/styles.css", "utf8");
-    const colours = blkcThemeCss().split("\n").filter((line) => line.includes("--color-"));
-    expect(colours.length).toBeGreaterThan(0);
-    for (const line of colours) expect(source).toContain(line.trim());
+    expect(readFileSync("src/theme.css", "utf8")).toContain(blkcThemeCss());
   });
 
   // Only meaningful after `npm run build`, which CI always runs before the tests.
   it.skipIf(!existsSync(css))("has a rule for every class the previews use", () => {
     const compiled = readFileSync(css, "utf8");
-    const html = [renderManifestToHTML(kit), renderManifestToHTML(circuit), renderManifestToHTML({ kind: "ui", id: "custom", attributes: {}, example: { a: 1 } })].join("");
+    const everySection = JSON.parse(readFileSync("fixtures/kit-basic.json", "utf8"));
+    const html = [renderManifestToHTML(kit), renderManifestToHTML(everySection), renderManifestToHTML(circuit), renderManifestToHTML({ kind: "ui", id: "custom", attributes: {}, example: { a: 1 } })].join("");
     const classes = new Set([...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean));
     const missing = [...classes].filter((name) => !name.startsWith("blkc-") && !compiled.includes(`.${name.replace(/[:/.]/g, (c) => `\\${c}`)}`));
     expect(missing).toEqual([]);
