@@ -55,6 +55,8 @@ jobs:
           test "$($BLKC --version)" = "$WANT"
           $BLKC new block hero-demo
           $BLKC new kit kit-demo
+          $BLKC new kit pixel-office
+          grep -q "Press Start 2P" kits/pixel-office/kit.json
           $BLKC new circuit circuit-demo
           $BLKC check
           node --test

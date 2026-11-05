@@ -82,6 +82,19 @@ describe("blkc new", () => {
     expect(existsSync(path.join(dir, "kits"))).toBe(false);
   });
 
+  it("writes the real Pixel Office Kit, not a blank one, and it passes check and its test", () => {
+    expect(blkc("new", "kit", "pixel-office").code).toBe(0);
+    const folder = path.join(dir, "kits/pixel-office");
+    const kit = JSON.parse(readFileSync(path.join(folder, "kit.json"), "utf8"));
+    expect(kit.name).toBe("Pixel Office");
+    expect(kit.theme.settings.color.palette.length).toBeGreaterThan(0);
+    expect(kit.content.pages[0].blocks.length).toBeGreaterThan(0);
+    expect(existsSync(path.join(folder, "NOTICE"))).toBe(true);
+    expect(blkc("check").code).toBe(0);
+    const test = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8" });
+    expect(test.status, test.stdout + test.stderr).toBe(0);
+  });
+
   it("refuses to overwrite an existing folder", () => {
     put("kits/demo/kit.json", "mine");
     expect(blkc("new", "kit", "demo").code).toBe(1);
