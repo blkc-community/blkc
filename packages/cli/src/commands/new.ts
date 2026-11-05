@@ -13,6 +13,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { IdentifierSchema, errorCodeDocsUrl, findErrorCode } from "@blkc-code/core";
 import { KIT_TEMPLATES } from "../kit-templates.js";
+import { fork, ForkError, type ForkKind } from "./fork.js";
 
 const DEFAULT_LICENSE = "MIT";
 
@@ -205,7 +206,8 @@ export function registerNewCommand(program: Command): void {
     .command("new <kind> <id>")
     .description("Scaffold a new block, kit, or circuit (D4 folder convention).")
     .option("--capability", "Scaffold a capability Block instead of a UI Block")
-    .action(async (kind: string, id: string, options: { capability?: boolean }) => {
+    .option("--from <source>", "Fork something that exists: a community name, or a local folder like ./blocks/hero")
+    .action(async (kind: string, id: string, options: { capability?: boolean; from?: string }) => {
       if (!["block", "kit", "circuit"].includes(kind)) {
         console.error(`Unknown kind: ${kind}. Use block, kit, or circuit.`);
         process.exit(1);
@@ -223,6 +225,27 @@ export function registerNewCommand(program: Command): void {
       if (!(await isUsable(dir))) {
         console.error(`${path.relative(root, dir)} already exists and is not empty. Nothing was changed.`);
         process.exit(1);
+      }
+
+      if (options.from) {
+        const spinner = ora(`Forking ${options.from}...`).start();
+        try {
+          const result = await fork(kind as ForkKind, id, options.from, dir, root);
+          spinner.succeed(`Forked ${options.from} to ${path.relative(root, dir)}`);
+          if (kind === "block" && result.hasComponent) {
+            console.log(chalk.gray(`Edit ${path.relative(root, dir)}/render.web.tsx, then run 'blkc dev' to see it.`));
+          } else if (kind === "block" && result.isCapability) {
+            console.log(chalk.gray(`Its code is in ${path.relative(root, dir)}/src.`));
+          } else if (kind === "block") {
+            console.log(chalk.yellow("This Block has no component to edit; its manifest was copied."));
+          } else {
+            console.log(chalk.gray(`Run 'blkc dev' to preview it. It still uses the Blocks and Kits it lists; fork those too to change them.`));
+          }
+        } catch (error) {
+          spinner.fail(error instanceof ForkError ? error.message : `Could not fork: ${String(error)}`);
+          process.exit(1);
+        }
+        return;
       }
 
       const spinner = ora(`Scaffolding ${kind} ${id}...`).start();

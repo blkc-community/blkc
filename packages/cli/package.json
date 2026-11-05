@@ -35,6 +35,8 @@
     "ora": "^8.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "sucrase": "^3.35.0",
+    "tailwindcss": "^4.3.4",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
   },

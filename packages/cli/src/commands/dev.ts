@@ -25,6 +25,7 @@ import { renderManifestDocument } from "@blkc-code/render-web/server";
 import stylesheet from "@blkc-code/render-web/styles.css";
 import { discover, kindOf, validateOne, type CheckIssue } from "./check.js";
 import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
+import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
 
 const DEFAULT_PORT = 4173;
 const PORT_ATTEMPTS = 20;
@@ -98,10 +99,13 @@ async function loadManifest(file: string, kind: Kind): Promise<Json> {
   return { ...kit, theme, content: { pages: [...files, ...inline] } };
 }
 
-async function scan(root: string): Promise<{ state: State; files: Map<string, Item> }> {
+const announced = new Set<string>();
+
+async function scan(root: string): Promise<{ state: State; files: Map<string, Item>; css: string }> {
   const issues: CheckIssue[] = [];
   const warnings: string[] = [];
   const files = new Map<string, Item>();
+  const localBlocks: LocalBlock[] = [];
   for (const file of await discover([root])) {
     const result = await validateOne(file);
     issues.push(...result.issues);
@@ -115,13 +119,26 @@ async function scan(root: string): Promise<{ state: State; files: Map<string, It
         const manifest = await loadManifest(file, kind);
         item.name = typeof manifest["name"] === "string" ? manifest["name"] : id;
         if (kind === "kit") item.pages = kitPages(manifest);
+        const component = kind === "block" ? findComponentFile(path.dirname(file)) : undefined;
+        if (component && typeof manifest["id"] === "string") localBlocks.push({ id: manifest["id"], file: component });
       } catch {
         item.valid = false;
       }
     }
     files.set(id, item);
   }
-  return { state: { items: [...files.values()], issues, warnings }, files };
+
+  const local = await syncLocalBlocks(localBlocks);
+  for (const file of local.loaded) {
+    if (announced.has(file)) continue;
+    announced.add(file);
+    console.log(chalk.gray(`Running your component: ${path.relative(process.cwd(), file)}`));
+  }
+  for (const { file, message } of local.errors) {
+    const rel = path.relative(process.cwd(), file) || file;
+    issues.push({ code: "BLKC-E100", file: rel, field: "", message, fix: "Fix the error in that file and save.", docs: errorCodeDocsUrl("BLKC-E100") });
+  }
+  return { state: { items: [...files.values()], issues, warnings }, files, css: local.css };
 }
 
 const escapeHtml = (value: string): string =>
@@ -188,14 +205,15 @@ export async function startDevServer(root: string, port: number, exactPort: bool
     }
     if (url.pathname === "/frame") {
       // The item comes from what the scan found, never from a path in the URL.
-      const item = (await scan(root)).files.get(url.searchParams.get("item") ?? "");
+      const { files, css } = await scan(root);
+      const item = files.get(url.searchParams.get("item") ?? "");
       if (!item) return send(res, 404, "text/html", messageFrame("Nothing to show here."), FRAME_CSP);
       if (!item.valid) {
         return send(res, 200, "text/html", messageFrame(`${item.id} has errors, listed below. Fix them and save.`), FRAME_CSP);
       }
       const manifest = await loadManifest(item.file, item.kind);
       const page = url.searchParams.get("page") ?? undefined;
-      return send(res, 200, "text/html", renderManifestDocument(manifest, { page, head: FRAME_HEAD }), FRAME_CSP);
+      return send(res, 200, "text/html", renderManifestDocument(manifest, { page, head: FRAME_HEAD + (css ? `<style>${css}</style>` : "") }), FRAME_CSP);
     }
     send(res, 404, "text/plain", "Not found");
   }
