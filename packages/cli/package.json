@@ -1,13 +1,13 @@
 {
   "name": "@blkc-code/cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "type": "module",
   "description": "BLKC developer CLI tools",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "bin": {
-    "blkc": "dist/cli.js"
+    "blkc": "dist/blkc.cjs"
   },
   "exports": {
     ".": {
@@ -22,7 +22,7 @@
     "bin"
   ],
   "scripts": {
-    "build": "tsc && cp bin/blkc.js dist/cli.js",
+    "build": "tsc && esbuild src/cli-entry.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/blkc.cjs && cp dist/blkc.cjs dist/cli.js",
     "build:watch": "tsc -w",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
@@ -32,9 +32,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@blkc-code/cli": "^0.1.2",
-    "@blkc-code/core": "^0.1.0",
-    "@blkc-code/logbook": "^0.1.0",
+    "@blkc-code/core": "^0.2.0",
+    "@blkc-code/logbook": "^0.1.3",
     "@modelcontextprotocol/sdk": "^1.32.0",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
@@ -46,7 +45,8 @@
     "@types/node": "^22.9.0",
     "@types/react": "^19.3.0",
     "typescript": "^5.9.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "esbuild": "^0.24.0"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

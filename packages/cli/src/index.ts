@@ -15,6 +15,8 @@ import { registerKitCommands } from "./commands/kit.js";
 import { registerCircuitCommands } from "./commands/circuit.js";
 import { registerLogbookCommands } from "./commands/logbook.js";
 import { registerDeployCommands } from "./commands/deploy.js";
+import { registerCheckCommand, registerValidateAlias } from "./commands/check.js";
+import { registerNewCommand } from "./commands/new.js";
 
 /**
  * The main BLKC CLI program.
@@ -25,7 +27,7 @@ export const program = new Command();
 program
   .name("blkc")
   .description("BLKC developer CLI - Tools for working with Blocks, Kits, Circuits, and Logbook")
-  .version("0.1.0");
+  .version("0.1.3");
 
 // Show help after errors
 program.showHelpAfterError();
@@ -46,6 +48,9 @@ registerKitCommands(program);
 registerCircuitCommands(program);
 registerLogbookCommands(program);
 registerDeployCommands(program);
+registerNewCommand(program);
+registerCheckCommand(program);
+registerValidateAlias(program);
 
 // Add a global --help flag
 program.option("--debug", "Enable debug mode");
