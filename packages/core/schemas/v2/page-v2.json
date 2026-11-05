@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9\\-\\/]*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "blocks": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "block": {
+            "type": "string"
+          },
+          "props": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "block"
+        ]
+      }
+    }
+  },
+  "required": [
+    "slug",
+    "title"
+  ],
+  "$id": "https://blkc.blackcode.space/schemas/v2/page-v2.json"
+}
