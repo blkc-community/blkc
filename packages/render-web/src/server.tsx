@@ -14,8 +14,8 @@
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BlockInstance } from "@blkc-code/core";
-import { renderBlock, renderBlocks, getGlobalCSS } from "./index.js";
+import { BlockInstance, KitManifest } from "@blkc-code/core";
+import { renderBlock, renderBlocks, getGlobalCSS, resolveKitPage } from "./index.js";
 import {
   RenderOptions,
   RenderToHtmlResult,
@@ -110,13 +110,23 @@ function renderBlocksToHTML(
 }
 
 /**
- * Render a page (array of Block instances) to HTML string.
+ * Render a page (array of Block instances, or a Kit + page slug) to HTML string.
  * This is the primary function for static site generation (NFR17-18).
  */
 function renderToHTML(
-  instances: BlockInstance[],
+  instancesOrKit: BlockInstance[] | KitManifest,
+  pageOrOptions?: string | RenderOptions,
   options: RenderOptions = {}
 ): RenderToHtmlResult {
+  if (Array.isArray(instancesOrKit)) {
+    return renderBlocksToHTML(instancesOrKit, (pageOrOptions as RenderOptions) ?? {});
+  }
+  const kit = instancesOrKit as KitManifest;
+  const page = (pageOrOptions as string) ?? "home";
+  const instances = resolveKitPage(kit, page);
+  if (!instances) {
+    return { html: "", success: false, error: `Page not found: ${page}`, renderedBlocks: [] };
+  }
   return renderBlocksToHTML(instances, options);
 }
 

@@ -1,0 +1,13 @@
+{
+  "name": "hero-default",
+  "instances": [
+    {
+      "block": "hero",
+      "props": {
+        "heading": "Hello",
+        "subheading": "World",
+        "cta": { "label": "Go", "href": "/go" }
+      }
+    }
+  ]
+}

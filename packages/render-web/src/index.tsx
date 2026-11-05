@@ -36,10 +36,13 @@ import {
   SectionProps,
 } from "./types.js";
 import * as utils from "./utils.js";
+import { cleanRichText } from "./sanitize.js";
 
 // Re-export types and utilities
 export * from "./types.js";
 export * from "./utils.js";
+export * from "./sanitize.js";
+export * from "./kit.js";
 export { clsx };
 
 // ============================================================================
@@ -257,7 +260,7 @@ function TextBlock({ props: p, className, style }: BlockProps<TextProps>): React
         textAlign: textAlign || undefined,
         ...style,
       }}
-      dangerouslySetInnerHTML={{ __html: content }}
+      dangerouslySetInnerHTML={{ __html: cleanRichText(content) }}
     />
   );
 }
