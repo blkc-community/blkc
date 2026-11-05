@@ -98,7 +98,7 @@ A shared, hash-chained audit trail that records all changes across Sites, boards
 ## Documentation
 
 - [Designing a Block](docs/DESIGN.md) - How a Block communicates its look: design props, Tailwind classes and Kit tokens
-- [v2 Specification](docs/v2-spec.md) - Complete technical specification
+- [v2 Specification](spec/v2.md) - Complete technical specification
 
 ## Development
 
@@ -137,8 +137,8 @@ blkc/
 │   ├── tailwind-preset/ # Tailwind preset and theme tokens
 │   ├── logbook/         # Audit trail implementation
 │   └── cli/             # CLI tools
-├── docs/
-│   └── v2-spec.md       # Complete v2 specification
+├── spec/
+│   └── v2.md             # Complete v2 specification
 ├── LICENSE             # Apache-2.0
 ├── README.md
 └── package.json        # Workspace root
