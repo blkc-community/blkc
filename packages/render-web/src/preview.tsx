@@ -25,6 +25,7 @@ type Row = Partial<Record<
 >>;
 const rows = (value: unknown): Row[] => (Array.isArray(value) ? (value as Row[]) : []);
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
 /** Work out what a parsed manifest is from its shape; null if it is none of them. */
 export function manifestKind(manifest: unknown): ManifestKind | null {
@@ -84,12 +85,11 @@ function BlockPreview({ manifest }: { manifest: Row }): ReactNode {
   const summary = text(manifest.summary);
 
   if (manifest.kind === "capability" || manifest.entryPoint) {
-    const describe = (row: Row): string => [text(row.name), text(row.type), text(row.description)].filter(Boolean).join(" · ");
     return (
       <Card title={name} summary={summary} label="Capability Block">
         <Note>A capability Block runs code and has no page to draw, so this shows what it takes and returns.</Note>
-        <ListSection title="Inputs" items={rows(manifest.inputs).map(describe)} />
-        <ListSection title="Outputs" items={rows(manifest.outputs).map(describe)} />
+        <ListSection title="Inputs" items={strings(manifest.inputs)} />
+        <ListSection title="Outputs" items={strings(manifest.outputs)} />
       </Card>
     );
   }

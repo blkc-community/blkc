@@ -76,9 +76,9 @@ describe("renderManifestToHTML", () => {
   });
 
   it("describes a capability Block", () => {
-    const html = renderManifestToHTML({ kind: "capability", id: "mailer", name: "Mailer", entryPoint: "./x.ts", inputs: [{ name: "to", type: "string" }], outputs: [] });
+    const html = renderManifestToHTML({ kind: "capability", id: "mailer", name: "Mailer", entryPoint: "./x.ts", inputs: ["to", "subject"], outputs: ["id"] });
     expect(html).toContain("Capability Block");
-    expect(html).toContain("to · string");
+    for (const name of ["to", "subject", "id"]) expect(html).toContain(`>${name}</li>`);
   });
 
   it("draws the chosen Kit page, with the Kit's theme", () => {
