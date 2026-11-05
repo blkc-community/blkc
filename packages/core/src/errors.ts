@@ -65,3 +65,58 @@ export function findErrorCode(code: string): BlkcErrorCode | undefined {
 export function errorCodeDocsUrl(code: string): string {
   return `https://blkc.blackcode.space/docs/errors/${code.toLowerCase()}`;
 }
+
+// ============================================================================
+// Structured parse errors: every schema failure carries a code and a field
+// ============================================================================
+
+export interface ManifestIssue {
+  /** A `BLKC-E*` code from the catalogue. */
+  code: string;
+  /** Dot path of the failing field, for example `attributes.heading.type`. Empty for the whole file. */
+  field: string;
+  message: string;
+}
+
+/** Thrown by `parseAny*`. `message` joins the issues so existing callers keep working. */
+export class ManifestError extends Error {
+  readonly issues: ManifestIssue[];
+
+  constructor(issues: ManifestIssue[]) {
+    super(issues.map((issue) => (issue.field ? `${issue.field}: ${issue.message}` : issue.message)).join("; "));
+    this.name = "ManifestError";
+    this.issues = issues;
+  }
+}
+
+/** The subset of a zod issue that the mapping reads. */
+interface SchemaIssue {
+  code?: string;
+  path: readonly PropertyKey[];
+  message: string;
+}
+
+function codeForIssue(issue: SchemaIssue, field: string): string {
+  const top = field.split(".")[0];
+  if (top === "manifestVersion") return "BLKC-E105";
+  if (top === "kind") return "BLKC-E106";
+  if (top === "renderers") return "BLKC-E107";
+  if (top === "example") return "BLKC-E109";
+  if (/^attributes\.[^.]+\.type$/.test(field)) return "BLKC-E108";
+  if (/\.transitions\.|^transitions\./.test(field)) return "BLKC-E110";
+  if (/^content\.pages\.\d+\.blocks\.\d+\.block$/.test(field)) return "BLKC-E111";
+  if (top === "id") return issue.message.includes("received undefined") ? "BLKC-E101" : "BLKC-E103";
+  if (issue.code === "invalid_type") {
+    return issue.message.includes("received undefined") ? "BLKC-E101" : "BLKC-E102";
+  }
+  return "BLKC-E100";
+}
+
+export function manifestErrorFrom(issues: readonly SchemaIssue[]): ManifestError {
+  return new ManifestError(
+    issues.map((issue) => {
+      const field = issue.path.map(String).join(".");
+      return { code: codeForIssue(issue, field), field, message: issue.message };
+    }),
+  );
+}

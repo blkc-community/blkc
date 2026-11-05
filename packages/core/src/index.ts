@@ -12,6 +12,7 @@
 
 import { createHash } from "crypto";
 import { z } from "zod";
+import { manifestErrorFrom } from "./errors.js";
 
 // ============================================================================
 // Shared Types and Utilities
@@ -446,8 +447,9 @@ export const RenderersSchema = z
     web: RendererRefSchema.optional(),
     native: RendererRefSchema.optional(),
     tv: RendererRefSchema.optional(),
+    canvas: RendererRefSchema.optional(),
   })
-  .refine((value) => Boolean(value.web || value.native || value.tv), {
+  .refine((value) => Boolean(value.web || value.native || value.tv || value.canvas), {
     message: "UI Blocks need at least one renderer (web first)",
   });
 
@@ -462,6 +464,8 @@ export const UiBlockSchema = z
     kind: z.literal("ui"),
     /** Inserter category, e.g. `hero`, `content`, `commerce`. */
     category: z.string().optional(),
+    /** D3: the one map authors write. parseAny derives `props` and `controls` from it. */
+    attributes: z.record(z.string(), AttributeSchema).optional(),
     props: PropsJsonSchema,
     controls: z.array(ControlSchema).default([]),
     supports: BlockSupportsSchema.optional(),
@@ -714,7 +718,25 @@ export type CircuitManifest = z.infer<typeof CircuitSchema>;
 // v2 schemas (manifestVersion: 2 required)
 // ============================================================================
 
+/**
+ * A UI Block as authors write it (D3, D4): one `attributes` map, with `props` and
+ * `controls` derived and `renderers` optional because `render.web.tsx` is found by
+ * folder convention.
+ */
+export const UiBlockAuthoringSchema = z.object({
+  ...blockBaseShape,
+  $schema: z.string().optional(),
+  manifestVersion: z.literal(2),
+  kind: z.literal("ui"),
+  category: z.string().optional(),
+  attributes: z.record(z.string(), AttributeSchema),
+  supports: BlockSupportsSchema.optional(),
+  renderers: RenderersSchema.optional(),
+  example: z.record(z.string(), z.any()).optional(),
+});
+
 export const BlockV2Schema = z.union([
+  UiBlockAuthoringSchema,
   UiBlockSchema.safeExtend({ manifestVersion: z.literal(2) }),
   CapabilityBlockSchema.extend({ manifestVersion: z.literal(2) }),
 ]);
@@ -748,6 +770,37 @@ export interface ParseAnyResult<T> {
 /** Alias for parseAnyBlock, matching the plan's parseAny() naming. */
 export const parseAny = parseAnyBlock;
 
+const DEFAULT_CONTROL: Record<AttributeType, ControlType> = {
+  string: "text",
+  number: "number",
+  boolean: "toggle",
+  richtext: "richtext",
+  link: "link",
+  image: "image",
+  color: "color",
+  list: "repeater",
+};
+
+/** Derive the editor controls an `attributes` map implies (spec section 3). */
+function controlsFromAttributes(attributes: AttributesMap): unknown[] {
+  return Object.entries(attributes).flatMap(([prop, attr]) => {
+    const control = (attr.control as ControlType | undefined) ?? (attr.enum ? "select" : DEFAULT_CONTROL[attr.type]);
+    // A list has no item fields to edit until `items` describes them.
+    if (control === "repeater") return [];
+    return [{
+      prop,
+      control,
+      label: attr.label ?? prop,
+      ...(attr.help ? { help: attr.help } : {}),
+      ...(attr.group ? { group: attr.group } : {}),
+      ...(attr.placeholder ? { placeholder: attr.placeholder } : {}),
+      ...(attr.min !== undefined ? { min: attr.min } : {}),
+      ...(attr.max !== undefined ? { max: attr.max } : {}),
+      ...(attr.enum ? { options: attr.enum.map((value) => ({ label: String(value), value })) } : {}),
+    }];
+  });
+}
+
 export function parseAnyBlock(input: unknown): ParseAnyResult<BlockManifest> {
   const warnings: string[] = [];
   let upgraded = false;
@@ -769,10 +822,23 @@ export function parseAnyBlock(input: unknown): ParseAnyResult<BlockManifest> {
     upgraded = true;
   }
 
-  const result = BlockSchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(result.error.issues.map((i) => i.message).join("; "));
+  if (raw["kind"] === "ui" && raw["attributes"] !== undefined) {
+    const attributes = z.record(z.string(), AttributeSchema).safeParse(raw["attributes"]);
+    if (!attributes.success) {
+      throw manifestErrorFrom(attributes.error.issues.map((i) => ({ ...i, path: ["attributes", ...i.path] })));
+    }
+    if (raw["props"] !== undefined) warnings.push("both attributes and props declared; attributes wins");
+    raw["props"] = compileAttributes(attributes.data).jsonSchema;
+    if (raw["controls"] === undefined) raw["controls"] = controlsFromAttributes(attributes.data);
+    // D4: render.web.tsx is found by folder convention, so renderers is optional.
+    if (raw["renderers"] === undefined) {
+      raw["renderers"] = { web: { package: "./render.web.tsx", export: "default" } };
+    }
   }
+
+  // Parse the matching member directly: a union reports only "Invalid input".
+  const result = raw["kind"] === "ui" ? UiBlockSchema.safeParse(raw) : CapabilityBlockSchema.safeParse(raw);
+  if (!result.success) throw manifestErrorFrom(result.error.issues);
   return { value: result.data, warnings, upgraded };
 }
 
@@ -793,9 +859,7 @@ export function parseAnyKit(input: unknown): ParseAnyResult<KitManifest> {
   }
 
   const result = KitSchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(result.error.issues.map((i) => i.message).join("; "));
-  }
+  if (!result.success) throw manifestErrorFrom(result.error.issues);
   return { value: result.data, warnings, upgraded };
 }
 
@@ -816,9 +880,7 @@ export function parseAnyCircuit(input: unknown): ParseAnyResult<CircuitManifest>
   }
 
   const result = CircuitSchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(result.error.issues.map((i) => i.message).join("; "));
-  }
+  if (!result.success) throw manifestErrorFrom(result.error.issues);
   return { value: result.data, warnings, upgraded };
 }
 // ============================================================================
