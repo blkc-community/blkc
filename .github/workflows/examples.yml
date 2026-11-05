@@ -1,0 +1,47 @@
+name: Examples
+
+# Builds each example against tarballs of this commit, exactly as a user would
+# consume the packages, and checks the page actually rendered.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Example (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { example: html, output: dist/index.html }
+          - { example: next, output: out/index.html }
+          - { example: astro, output: dist/index.html }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Build and pack the packages
+        run: |
+          npm run build --workspace=packages/core
+          npm run build --workspace=packages/render-web
+          npm pack --workspace=packages/core --workspace=packages/render-web --pack-destination "$RUNNER_TEMP"
+      - name: Point the example at the tarballs
+        working-directory: examples/${{ matrix.example }}
+        run: |
+          npm pkg set "dependencies.@blkc-code/render-web=file:$(echo "$RUNNER_TEMP"/blkc-code-render-web-*.tgz)"
+          CORE="file:$(echo "$RUNNER_TEMP"/blkc-code-core-*.tgz)"
+          npm pkg set "overrides.@blkc-code/core=$CORE"
+          if npm pkg get dependencies.@blkc-code/core | grep -q .; then npm pkg set "dependencies.@blkc-code/core=$CORE"; fi
+          npm install
+      - run: npm run build
+        working-directory: examples/${{ matrix.example }}
+      - name: Check the page rendered
+        working-directory: examples/${{ matrix.example }}
+        run: grep -q "Strength for every age" ${{ matrix.output }}

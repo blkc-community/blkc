@@ -9,6 +9,7 @@
  */
 
 import { BlockInstance, UiBlockManifest } from "@blkc-code/core";
+import type { Theme } from "@blkc-code/core";
 import { ThemeVariables, DEFAULT_THEME } from "./types.js";
 
 // ============================================================================
@@ -120,6 +121,44 @@ function mergeTheme(theme?: ThemeVariables): ThemeVariables {
 /**
  * Convert theme variables to CSS custom properties string.
  */
+/** Colour slugs with a different name in the variable set. */
+const PALETTE_ALIASES: Record<string, string> = {
+  foreground: "--blkc-color-text",
+  "muted-foreground": "--blkc-color-text-secondary",
+};
+
+/**
+ * A theme value ends up inside a style attribute. Anything that could end the
+ * declaration or fetch a URL is refused rather than escaped.
+ */
+function isSafeCssValue(value: unknown): value is string {
+  return typeof value === "string" && !/[;{}<>]|url\(|expression\(|@import/i.test(value);
+}
+
+/**
+ * `theme.json` (spec Q5: colours, two font families, radius, spacing scale) as
+ * CSS variables. The first font family is the body font, the second the heading.
+ */
+function themeJsonToVariables(theme?: Theme): Record<string, string> {
+  const vars: Record<string, string> = {};
+  const set = (name: string, value: unknown): void => {
+    if (isSafeCssValue(value)) vars[name] = value;
+  };
+  const slug = (value: string): string => value.replace(/[^a-z0-9-]/gi, "");
+
+  for (const { slug: name, color } of theme?.settings?.color?.palette ?? []) {
+    set(PALETTE_ALIASES[name] ?? `--blkc-color-${slug(name)}`, color);
+  }
+  const families = theme?.settings?.typography?.fontFamilies ?? [];
+  set("--blkc-font-family", families[0]?.fontFamily);
+  set("--blkc-font-family-heading", families[1]?.fontFamily);
+  for (const { slug: name, size } of theme?.settings?.spacing?.spacingSizes ?? []) {
+    set(`--blkc-spacing-${slug(name)}`, size);
+  }
+  set("--blkc-border-radius", theme?.styles?.["radius"]);
+  return vars;
+}
+
 function themeToCss(theme: ThemeVariables): string {
   return Object.entries(theme)
     .map(([key, value]) => `${key}: ${value};`)
@@ -417,6 +456,7 @@ export {
   addAlpha,
   mergeTheme,
   themeToCss,
+  themeJsonToVariables,
   themeToStyle,
   getAlignmentClass,
   getTextAlignmentClass,

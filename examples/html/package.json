@@ -1,0 +1,11 @@
+{
+  "name": "blkc-example-html",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": {
+    "@blkc-code/render-web": "^0.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

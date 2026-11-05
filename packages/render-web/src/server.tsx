@@ -14,14 +14,15 @@
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BlockInstance } from "@blkc-code/core";
-import { renderBlock, renderBlocks, getGlobalCSS } from "./index.js";
+import { BlockInstance, KitManifest } from "@blkc-code/core";
+import { renderBlock, renderBlocks, getGlobalCSS, resolveKitPage } from "./index.js";
 import {
   RenderOptions,
   RenderToHtmlResult,
   ThemeVariables,
 } from "./types.js";
 import * as utils from "./utils.js";
+import { kitPageStyle } from "./kit.js";
 
 // ============================================================================
 // HTML Rendering (for SSG and static export)
@@ -68,7 +69,8 @@ function renderBlockToHTML(
  */
 function renderBlocksToHTML(
   instances: BlockInstance[],
-  options: RenderOptions = {}
+  options: RenderOptions = {},
+  pageStyle?: React.CSSProperties
 ): RenderToHtmlResult {
   const { elements, results } = renderBlocks(instances, options);
   const renderedBlocks = results.map((r) => r.blockId);
@@ -90,7 +92,7 @@ function renderBlocksToHTML(
 
   try {
     const html = renderToStaticMarkup(
-      <div className="blkc-page">{elements.map((element, index) => (
+      <div className="blkc-page" style={pageStyle}>{elements.map((element, index) => (
         <React.Fragment key={index}>{element}</React.Fragment>
       ))}</div>
     );
@@ -110,14 +112,24 @@ function renderBlocksToHTML(
 }
 
 /**
- * Render a page (array of Block instances) to HTML string.
+ * Render a page (array of Block instances, or a Kit + page slug) to HTML string.
  * This is the primary function for static site generation (NFR17-18).
  */
 function renderToHTML(
-  instances: BlockInstance[],
+  instancesOrKit: BlockInstance[] | KitManifest,
+  pageOrOptions?: string | RenderOptions,
   options: RenderOptions = {}
 ): RenderToHtmlResult {
-  return renderBlocksToHTML(instances, options);
+  if (Array.isArray(instancesOrKit)) {
+    return renderBlocksToHTML(instancesOrKit, (pageOrOptions as RenderOptions) ?? {});
+  }
+  const kit = instancesOrKit as KitManifest;
+  const page = (pageOrOptions as string) ?? "home";
+  const instances = resolveKitPage(kit, page);
+  if (!instances) {
+    return { html: "", success: false, error: `Page not found: ${page}`, renderedBlocks: [] };
+  }
+  return renderBlocksToHTML(instances, options, kitPageStyle(kit));
 }
 
 // ============================================================================
