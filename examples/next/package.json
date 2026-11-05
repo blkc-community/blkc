@@ -5,7 +5,7 @@
     "build": "next build"
   },
   "dependencies": {
-    "@blkc-code/core": "^0.2.0",
+    "@blkc-code/core": "^0.2.1",
     "@blkc-code/render-web": "^0.2.0",
     "next": "^16.0.0",
     "react": "^19.3.0",
