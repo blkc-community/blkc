@@ -1,0 +1,196 @@
+{
+  "manifestVersion": 2,
+  "id": "fixture-kit",
+  "name": "Fixture Kit",
+  "summary": "Every section, for the shared snapshot.",
+  "description": "Renderers compare their output with fixtures/kit-basic.html.",
+  "version": "1.0.0",
+  "category": "fixture",
+  "blocks": [
+    {
+      "blockId": "hero",
+      "version": "^1.0.0"
+    },
+    {
+      "blockId": "services",
+      "version": "^1.0.0"
+    },
+    {
+      "blockId": "story",
+      "version": "^1.0.0"
+    },
+    {
+      "blockId": "values",
+      "version": "^1.0.0"
+    },
+    {
+      "blockId": "cta",
+      "version": "^1.0.0"
+    },
+    {
+      "blockId": "contact",
+      "version": "^1.0.0"
+    }
+  ],
+  "theme": {
+    "version": 3,
+    "settings": {
+      "color": {
+        "palette": [
+          {
+            "slug": "primary",
+            "name": "Primary",
+            "color": "#7a1f3d"
+          },
+          {
+            "slug": "foreground",
+            "name": "Foreground",
+            "color": "#1b1b1f"
+          }
+        ]
+      },
+      "typography": {
+        "fontFamilies": [
+          {
+            "slug": "body",
+            "name": "Body",
+            "fontFamily": "Georgia, serif"
+          },
+          {
+            "slug": "heading",
+            "name": "Heading",
+            "fontFamily": "Inter, sans-serif"
+          }
+        ]
+      },
+      "spacing": {
+        "spacingSizes": [
+          {
+            "slug": "md",
+            "name": "Medium",
+            "size": "1.25rem"
+          }
+        ]
+      }
+    },
+    "styles": {
+      "radius": "0.75rem"
+    }
+  },
+  "content": {
+    "pages": [
+      {
+        "slug": "",
+        "title": "Home",
+        "blocks": [
+          {
+            "block": "hero",
+            "props": {
+              "heading": "Strength for every age",
+              "subheading": "Coaching in your neighbourhood.",
+              "cta": {
+                "label": "Book a call",
+                "href": "/contact"
+              }
+            }
+          },
+          {
+            "block": "services",
+            "props": {
+              "heading": "What we offer",
+              "intro": "Three ways to start.",
+              "items": [
+                {
+                  "title": "One to one",
+                  "text": "Coaching built around you.",
+                  "link": {
+                    "label": "Read more",
+                    "href": "/one-to-one"
+                  }
+                },
+                {
+                  "title": "Small groups",
+                  "text": "Up to six people."
+                }
+              ]
+            }
+          },
+          {
+            "block": "story",
+            "props": {
+              "heading": "Our story",
+              "image": {
+                "src": "/story.jpg",
+                "alt": "The studio"
+              },
+              "imageSide": "left",
+              "body": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Started in a "
+                      },
+                      {
+                        "type": "text",
+                        "text": "garage",
+                        "marks": [
+                          {
+                            "type": "bold"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "text",
+                        "text": " & still growing."
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "block": "values",
+            "props": {
+              "heading": "What we value",
+              "items": [
+                {
+                  "title": "Patience"
+                },
+                {
+                  "title": "Honesty",
+                  "text": "We say what will work."
+                }
+              ]
+            }
+          },
+          {
+            "block": "cta",
+            "props": {
+              "heading": "Ready to start?",
+              "text": "The first session is on us.",
+              "cta": {
+                "label": "Get in touch",
+                "href": "/contact"
+              }
+            }
+          },
+          {
+            "block": "contact",
+            "props": {
+              "heading": "Find us",
+              "intro": "Come and say hello.",
+              "email": "hello@example.com",
+              "phone": "+1 (555) 010-0100",
+              "address": "1 Example Street"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

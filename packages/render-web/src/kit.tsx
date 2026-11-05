@@ -13,6 +13,7 @@ import { KitManifest } from "@blkc-code/core";
 import { BlockInstance } from "@blkc-code/core";
 import { renderBlock, renderBlocks } from "./index.js";
 import { RenderOptions } from "./types.js";
+import { themeJsonToVariables } from "./utils.js";
 
 // ============================================================================
 // Kit page resolution
@@ -35,6 +36,12 @@ export function resolveKitPage(kit: KitManifest, page: string): BlockInstance[] 
   return found.blocks ?? [];
 }
 
+/** The Kit's theme.json as CSS variables on the page wrapper. */
+export function kitPageStyle(kit: KitManifest): React.CSSProperties | undefined {
+  const vars = themeJsonToVariables(kit.theme);
+  return Object.keys(vars).length > 0 ? (vars as React.CSSProperties) : undefined;
+}
+
 /**
  * React component that renders a Kit's page.
  */
@@ -46,7 +53,7 @@ export function KitPage({ kit, page, options }: KitPageProps): ReactNode {
 
   const { elements } = renderBlocks(instances, options ?? {});
   return (
-    <div className="blkc-page">
+    <div className="blkc-page" style={kitPageStyle(kit)}>
       {elements.map((element, index) => (
         <React.Fragment key={index}>{element}</React.Fragment>
       ))}

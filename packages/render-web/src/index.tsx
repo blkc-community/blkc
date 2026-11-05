@@ -36,7 +36,8 @@ import {
   SectionProps,
 } from "./types.js";
 import * as utils from "./utils.js";
-import { cleanRichText } from "./sanitize.js";
+import { ContactBlock, CtaBlock, ServicesBlock, StoryBlock, ValuesBlock } from "./sections.js";
+import { richTextToHtml, type RichText } from "./richtext.js";
 
 // Re-export types and utilities
 export * from "./types.js";
@@ -260,7 +261,7 @@ function TextBlock({ props: p, className, style }: BlockProps<TextProps>): React
         textAlign: textAlign || undefined,
         ...style,
       }}
-      dangerouslySetInnerHTML={{ __html: cleanRichText(content) }}
+      dangerouslySetInnerHTML={{ __html: richTextToHtml(content as RichText) }}
     />
   );
 }
@@ -475,6 +476,11 @@ registerBlock("text", TextBlock as unknown as BlockComponent);
 registerBlock("image", ImageBlock as unknown as BlockComponent);
 registerBlock("button", ButtonBlock as unknown as BlockComponent);
 registerBlock("section", SectionBlock as unknown as BlockComponent);
+registerBlock("services", ServicesBlock as unknown as BlockComponent);
+registerBlock("story", StoryBlock as unknown as BlockComponent);
+registerBlock("values", ValuesBlock as unknown as BlockComponent);
+registerBlock("cta", CtaBlock as unknown as BlockComponent);
+registerBlock("contact", ContactBlock as unknown as BlockComponent);
 
 // ============================================================================
 // Render Functions
@@ -649,6 +655,11 @@ export {
   ImageBlock,
   ButtonBlock,
   SectionBlock,
+  ServicesBlock,
+  StoryBlock,
+  ValuesBlock,
+  CtaBlock,
+  ContactBlock,
   
   // Registry functions
   registerBlock,

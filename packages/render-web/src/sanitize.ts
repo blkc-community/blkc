@@ -1,5 +1,9 @@
 /**
- * BLKC Render-Web - Lightweight HTML sanitiser for rich text.
+ * BLKC Render-Web - HTML sanitiser for rich text.
+ *
+ * Safe by construction: the output is rebuilt from an allow-list, so no input
+ * attribute or tag is ever copied through. Only `href` survives, and only after
+ * its scheme is checked. All other text is escaped.
  *
  * @package @blkc-code/render-web
  * @license Apache-2.0
@@ -10,107 +14,107 @@ const ALLOWED_TAGS = new Set([
   "ul", "ol", "li", "h3", "h4", "blockquote",
 ]);
 
-const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  a: new Set(["href", "target", "rel"]),
-};
+/** Dropped with their contents. Everything else disallowed keeps its text. */
+const DROP_WITH_CONTENT = new Set(["script", "style"]);
 
-const SAFE_SCHEME = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
+/** A same-site path may not become protocol-relative once a browser normalises it. */
+const SAFE_SCHEME = /^(https?:|mailto:|tel:|\/(?![/\\&])|#)/i;
 const HTTP_SCHEME = /^https?:/i;
+/** Browsers strip these inside URLs, so `/<tab>/evil.com` would become `//evil.com`. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/** Escape `&` unless it already starts an entity, so `&amp;` stays `&amp;`. */
+const BARE_AMPERSAND = /&(?!(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);)/gi;
 
 function escapeText(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text.replace(BARE_AMPERSAND, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function escapeAttr(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return escapeText(value).replace(/"/g, "&quot;");
 }
 
-function parseAttributes(tag: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const attrRegex = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
-  let m: RegExpExecArray | null;
-  while ((m = attrRegex.exec(tag)) !== null) {
-    attrs[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? "";
-  }
-  return attrs;
+function hrefOf(tag: string): string | undefined {
+  const match = /[\s/"']href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+  return match ? (match[1] ?? match[2] ?? match[3] ?? "") : undefined;
+}
+
+function isSafeHref(href: string): boolean {
+  return SAFE_SCHEME.test(href) && !CONTROL_CHARS.test(href);
 }
 
 export function cleanRichText(html: string): string {
   if (!html || !html.trim()) return "";
 
+  // Comments first, so a tag split by a comment is still seen as a tag below.
+  const source = html.replace(/<!--[\s\S]*?-->/g, "");
+  const lower = source.toLowerCase();
+
   const result: string[] = [];
   const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  // stack tracks whether an <a> was converted to <span>
-  const stack: string[] = [];
+  /** Open elements as written, each with the tag that was emitted for it. */
+  const stack: { name: string; emitted: string }[] = [];
 
-  while ((match = tagRegex.exec(html)) !== null) {
+  while ((match = tagRegex.exec(source)) !== null) {
     if (match.index > lastIndex) {
-      result.push(escapeText(html.slice(lastIndex, match.index)));
+      result.push(escapeText(source.slice(lastIndex, match.index)));
     }
 
     const fullTag = match[0];
     const tagName = match[1].toLowerCase();
     const isClosing = fullTag.startsWith("</");
+    lastIndex = match.index + fullTag.length;
 
     if (!ALLOWED_TAGS.has(tagName)) {
-      // Drop script/style entirely (tag + content), not just the tag.
-      if (tagName === "script" || tagName === "style") {
-        const closeTag = `</${tagName}>`;
-        const closeIdx = html.toLowerCase().indexOf(closeTag, match.index);
-        if (closeIdx !== -1) {
-          lastIndex = closeIdx + closeTag.length;
-          tagRegex.lastIndex = lastIndex;
-          continue;
-        }
+      if (!isClosing && DROP_WITH_CONTENT.has(tagName)) {
+        const closeIdx = lower.indexOf(`</${tagName}`, lastIndex);
+        const closeEnd = closeIdx === -1 ? -1 : source.indexOf(">", closeIdx);
+        // Unterminated: a browser would treat the rest as script, so drop the rest.
+        lastIndex = closeEnd === -1 ? source.length : closeEnd + 1;
+        tagRegex.lastIndex = lastIndex;
       }
-      lastIndex = match.index + fullTag.length;
+      continue;
+    }
+
+    if (tagName === "br") {
+      if (!isClosing) result.push("<br />");
       continue;
     }
 
     if (isClosing) {
-      // if the matching open was converted to span, close as span
-      const converted = stack.pop();
-      if (converted === "span") {
-        result.push("</span>");
-      } else {
-        result.push(`</${tagName}>`);
-      }
-    } else if (tagName === "br") {
-      result.push("<br />");
-    } else {
-      const attrs = parseAttributes(fullTag);
-      const allowed = ALLOWED_ATTRS[tagName] ?? new Set();
-      const safeAttrs: string[] = [];
-      let emitTag = tagName;
-
-      if (tagName === "a" && allowed.has("href")) {
-        const href = (attrs["href"] ?? "").trim();
-        if (SAFE_SCHEME.test(href)) {
-          safeAttrs.push(`href="${escapeAttr(href)}"`);
-          if (HTTP_SCHEME.test(href)) {
-            safeAttrs.push('target="_blank"', 'rel="noopener noreferrer"');
-          }
-        } else {
-          // unsafe scheme: render as span, keep text
-          emitTag = "span";
-        }
-      }
-
-      const attrStr = safeAttrs.length ? " " + safeAttrs.join(" ") : "";
-      result.push(`<${emitTag}${attrStr}>`);
-      stack.push(emitTag === "span" && tagName === "a" ? "span" : tagName);
+      // A closing tag with no matching open is dropped. One that skips over open
+      // elements closes them first, so the output stays balanced.
+      let open = stack.length - 1;
+      while (open >= 0 && stack[open].name !== tagName) open--;
+      if (open < 0) continue;
+      while (stack.length > open) result.push(`</${stack.pop()!.emitted}>`);
+      continue;
     }
 
-    lastIndex = match.index + fullTag.length;
+    let emitted = tagName;
+    let attrs = "";
+    if (tagName === "a") {
+      const href = (hrefOf(fullTag) ?? "").trim();
+      if (isSafeHref(href)) {
+        attrs = ` href="${escapeAttr(href)}"`;
+        if (HTTP_SCHEME.test(href)) attrs += ' target="_blank" rel="noopener noreferrer"';
+      } else {
+        emitted = "span"; // unsafe or missing link: keep the text
+      }
+    }
+    result.push(`<${emitted}${attrs}>`);
+    stack.push({ name: tagName, emitted });
   }
 
-  if (lastIndex < html.length) {
-    result.push(escapeText(html.slice(lastIndex)));
+  if (lastIndex < source.length) {
+    result.push(escapeText(source.slice(lastIndex)));
   }
 
-  let cleaned = result.join("");
-  cleaned = cleaned.replace(/<p>\s*<\/p>/g, "");
-  return cleaned.trim();
+  // Close anything left open, or it would leak formatting into the rest of the page.
+  while (stack.length > 0) result.push(`</${stack.pop()!.emitted}>`);
+
+  return result.join("").replace(/<p>\s*<\/p>/g, "").trim();
 }

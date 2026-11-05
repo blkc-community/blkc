@@ -22,6 +22,7 @@ import {
   ThemeVariables,
 } from "./types.js";
 import * as utils from "./utils.js";
+import { kitPageStyle } from "./kit.js";
 
 // ============================================================================
 // HTML Rendering (for SSG and static export)
@@ -68,7 +69,8 @@ function renderBlockToHTML(
  */
 function renderBlocksToHTML(
   instances: BlockInstance[],
-  options: RenderOptions = {}
+  options: RenderOptions = {},
+  pageStyle?: React.CSSProperties
 ): RenderToHtmlResult {
   const { elements, results } = renderBlocks(instances, options);
   const renderedBlocks = results.map((r) => r.blockId);
@@ -90,7 +92,7 @@ function renderBlocksToHTML(
 
   try {
     const html = renderToStaticMarkup(
-      <div className="blkc-page">{elements.map((element, index) => (
+      <div className="blkc-page" style={pageStyle}>{elements.map((element, index) => (
         <React.Fragment key={index}>{element}</React.Fragment>
       ))}</div>
     );
@@ -127,7 +129,7 @@ function renderToHTML(
   if (!instances) {
     return { html: "", success: false, error: `Page not found: ${page}`, renderedBlocks: [] };
   }
-  return renderBlocksToHTML(instances, options);
+  return renderBlocksToHTML(instances, options, kitPageStyle(kit));
 }
 
 // ============================================================================
