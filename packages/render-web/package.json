@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/render-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "React/Next.js compatible web renderer for BLKC UI Blocks",
   "main": "dist/index.js",
@@ -17,6 +17,7 @@
       "import": "./dist/server.js",
       "require": "./dist/server.js"
     },
+    "./styles.css": "./dist/styles.css",
     "./fixtures/*.json": "./fixtures/*.json",
     "./fixtures/*.html": "./fixtures/*.html"
   },
@@ -26,7 +27,7 @@
     "fixtures"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tailwindcss -i src/styles.css -o dist/styles.css --minify",
     "build:watch": "tsc -w",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@blkc-code/tailwind-preset": "*",
+    "@tailwindcss/cli": "^4.3.4",
     "@types/jsdom": "^30.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

@@ -8,6 +8,20 @@
 
 ## Quick Start
 
+Make something and see it in your browser. You only need Node.js 22 or newer:
+
+```bash
+mkdir my-site && cd my-site
+npx @blkc-code/cli@latest new kit pixel-office
+npx @blkc-code/cli@latest dev
+```
+
+`blkc dev` opens a preview at phone, tablet and desktop widths. It reloads when you save and
+shows any errors in the page. It previews every Block, Kit and Circuit in the folder. Use
+`--port` to pick a port and `--no-open` to skip opening the browser.
+
+To work on BLKC itself:
+
 ```bash
 # Install the core package
 npm install @blkc-code/core
@@ -31,6 +45,12 @@ npm run build
 | [`@blkc-code/cli`](packages/cli) | BLKC developer CLI tools | ✅ Stable |
 
 ## Styling
+
+No Tailwind in your project? Add the compiled stylesheet and you are done:
+
+```js
+import "@blkc-code/render-web/styles.css";
+```
 
 The renderer emits Tailwind utility classes, so there is no bespoke CSS to maintain. Add the preset and you get BLKC's design tokens as Tailwind classes:
 

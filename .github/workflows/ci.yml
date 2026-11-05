@@ -80,6 +80,8 @@ jobs:
 
   licence:
     name: Licence check
+    env:
+      ALLOWED_LICENCES: "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,10 +90,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build:all
       - name: Check licences
         # Scans what ships to users, not dev-only tools. The root package is private
         # (UNLICENSED by design) and must be excluded.
-        run: npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0"
+        run: npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --onlyAllow "$ALLOWED_LICENCES"
+      - name: Check licences of what the CLI bundles
+        run: node scripts/check-bundle-licences.mjs
 
   secrets:
     name: Secret scan

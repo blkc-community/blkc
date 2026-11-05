@@ -44,6 +44,7 @@ export * from "./types.js";
 export * from "./utils.js";
 export * from "./sanitize.js";
 export * from "./kit.js";
+export * from "./preview.js";
 export { clsx };
 
 // ============================================================================

@@ -1,0 +1,31 @@
+/*
+ * The compiled stylesheet for the renderer: `@blkc-code/render-web/styles.css`.
+ * Use it when a project has no Tailwind of its own. The token mapping matches
+ * blkcThemeCss() in @blkc-code/tailwind-preset; a test keeps the two in step.
+ */
+@import "tailwindcss" source(none);
+@source "./";
+
+@theme inline {
+  --color-primary: var(--blkc-color-primary, #0066cc);
+  --color-primary-foreground: var(--blkc-color-background, #ffffff);
+  --color-secondary: var(--blkc-color-secondary, #6c757d);
+  --color-secondary-foreground: var(--blkc-color-background, #ffffff);
+  --color-background: var(--blkc-color-background, #ffffff);
+  --color-foreground: var(--blkc-color-text, #1a1a1a);
+  --color-muted: var(--blkc-color-background, #ffffff);
+  --color-muted-foreground: var(--blkc-color-text-secondary, #6c757d);
+  --color-border: var(--blkc-color-border, #e0e0e0);
+  --color-input: var(--blkc-color-border, #e0e0e0);
+  --color-accent: var(--blkc-color-primary, #0066cc);
+  --color-accent-foreground: var(--blkc-color-background, #ffffff);
+  --color-ring: var(--blkc-color-primary, #0066cc);
+}
+
+/* Kit themes set these variables on .blkc-page, so the page paints itself. */
+.blkc-page {
+  min-height: 100vh;
+  background-color: var(--blkc-color-background, #ffffff);
+  color: var(--blkc-color-text, #1a1a1a);
+  font-family: var(--blkc-font-family, system-ui, sans-serif);
+}
