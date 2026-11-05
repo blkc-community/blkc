@@ -65,6 +65,24 @@ describe("themeJsonToVariables", () => {
     expect(vars).toEqual({ "--blkc-color-accent": "#123456" });
   });
 
+  it("maps palette slugs to the variables the utilities read", () => {
+    const vars = themeJsonToVariables({
+      version: 3,
+      settings: {
+        color: {
+          palette: [
+            { slug: "foreground", name: "F", color: "#111111" },
+            { slug: "muted-foreground", name: "M", color: "#222222" },
+            { slug: "muted", name: "S", color: "#333333" },
+          ],
+        },
+      },
+    });
+    expect(vars["--blkc-color-text"]).toBe("#111111");
+    expect(vars["--blkc-color-text-secondary"]).toBe("#222222");
+    expect(vars["--blkc-color-muted"]).toBe("#333333");
+  });
+
   it("returns nothing for no theme", () => {
     expect(themeJsonToVariables(undefined)).toEqual({});
   });

@@ -124,7 +124,7 @@ function mergeTheme(theme?: ThemeVariables): ThemeVariables {
 /** Colour slugs with a different name in the variable set. */
 const PALETTE_ALIASES: Record<string, string> = {
   foreground: "--blkc-color-text",
-  muted: "--blkc-color-text-secondary",
+  "muted-foreground": "--blkc-color-text-secondary",
 };
 
 /**
