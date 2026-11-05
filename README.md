@@ -20,6 +20,23 @@ npx @blkc-code/cli@latest dev
 shows any errors in the page. It previews every Block, Kit and Circuit in the folder. Use
 `--port` to pick a port and `--no-open` to skip opening the browser.
 
+### Make something your own
+
+Blocks, Kits and Circuits can all be forked. `--from` copies one into your project under a new name, and `blkc dev` shows it:
+
+```bash
+npx @blkc-code/cli@latest new kit my-office --from pixel-office
+npx @blkc-code/cli@latest new block my-hero --from hero
+npx @blkc-code/cli@latest new circuit my-business --from smb-business-circuit
+npx @blkc-code/cli@latest dev
+```
+
+The source is a name from [blocks](https://github.com/blkc-community/blocks), [kits](https://github.com/blkc-community/kits) or [circuits](https://github.com/blkc-community/circuits), or a local folder such as `./kits/my-kit`. Forks keep the original licence, and the README records where they came from.
+
+A forked UI Block has its component in `render.web.tsx`. Edit it, use any Tailwind class, and save. To use it on a Kit page, list its id in the Kit's `blocks`. A Block with the same id as a built-in, such as `hero`, replaces it in the preview. On your own site, call `registerBlock("my-hero", MyHero)` from `@blkc-code/render-web`.
+
+`blkc dev` runs your project's components on your machine, as any dev server does, so read code you did not write before you run it.
+
 To work on BLKC itself:
 
 ```bash

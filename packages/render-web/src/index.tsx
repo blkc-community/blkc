@@ -46,6 +46,7 @@ export * from "./sanitize.js";
 export * from "./kit.js";
 export * from "./preview.js";
 export { clsx };
+export { richTextToHtml, type RichText };
 
 // ============================================================================
 // Default Block Components
@@ -451,6 +452,13 @@ function registerBlock(blockId: string, component: BlockComponent, manifest?: Ui
 }
 
 /**
+ * Remove a Block from the registry.
+ */
+function unregisterBlock(blockId: string): void {
+  defaultRegistry.delete(blockId);
+}
+
+/**
  * Get a Block component from the registry.
  */
 function getBlockComponent(blockId: string): BlockRegistryEntry | undefined {
@@ -664,6 +672,7 @@ export {
   
   // Registry functions
   registerBlock,
+  unregisterBlock,
   getBlockComponent,
   getRegisteredBlocks,
   isBlockRegistered,
