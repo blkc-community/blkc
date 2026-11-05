@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/core",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "description": "BLKC core schemas and types for Blocks, Kits, Circuits, and Logbook",
   "main": "dist/index.js",
@@ -11,14 +11,19 @@
       "require": "./dist/index.js",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./schemas/*": {
+      "types": "./schemas/v2/*.json",
+      "default": "./schemas/v2/*.json"
     }
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "schemas"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/generate-schemas.mjs",
     "build:watch": "tsc -w",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",

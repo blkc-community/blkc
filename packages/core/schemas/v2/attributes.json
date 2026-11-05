@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "richtext",
+        "link",
+        "image",
+        "color",
+        "list"
+      ]
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "default": {},
+    "minLength": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "maxLength": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "min": {
+      "type": "number"
+    },
+    "max": {
+      "type": "number"
+    },
+    "enum": {
+      "type": "array",
+      "items": {}
+    },
+    "label": {
+      "type": "string"
+    },
+    "help": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    },
+    "control": {
+      "type": "string"
+    },
+    "group": {
+      "type": "string",
+      "enum": [
+        "content",
+        "style",
+        "settings"
+      ]
+    },
+    "items": {}
+  },
+  "required": [
+    "type"
+  ],
+  "$id": "https://blkc.blackcode.space/schemas/v2/attributes.json"
+}

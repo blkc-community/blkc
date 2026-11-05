@@ -108,6 +108,117 @@ export const safeParse = <T,>(schema: z.ZodType<T>, data: unknown): T => {
 // Person
 // ============================================================================
 
+// ============================================================================
+// Attributes (D3) — one map, compiled to zod + JSON Schema + TypeScript
+// ============================================================================
+
+export const AttributeTypeSchema = z.enum([
+  "string", "number", "boolean", "richtext", "link", "image", "color", "list",
+]);
+
+export type AttributeType = z.infer<typeof AttributeTypeSchema>;
+
+export const AttributeSchema = z.object({
+  type: AttributeTypeSchema,
+  required: z.boolean().optional(),
+  default: z.any().optional(),
+  // constraints
+  minLength: z.number().int().nonnegative().optional(),
+  maxLength: z.number().int().nonnegative().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  enum: z.array(z.any()).optional(),
+  // UI
+  label: z.string().optional(),
+  help: z.string().optional(),
+  placeholder: z.string().optional(),
+  control: z.string().optional(),
+  group: z.enum(["content", "style", "settings"]).optional(),
+  // for list type
+  items: z.any().optional(),
+});
+
+export type Attribute = z.infer<typeof AttributeSchema>;
+
+export type AttributesMap = Record<string, Attribute>;
+
+/**
+ * Compile an attributes map (D3) into a zod schema and a JSON Schema object.
+ * The TypeScript type is inferred from the zod schema via z.infer.
+ */
+export function compileAttributes(attributes: AttributesMap): {
+  zodSchema: z.ZodObject<Record<string, z.ZodTypeAny>>;
+  jsonSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] };
+} {
+  const properties: Record<string, z.ZodTypeAny> = {};
+  const required: string[] = [];
+  const jsonProperties: Record<string, unknown> = {};
+
+  for (const [name, attr] of Object.entries(attributes)) {
+    let zodType: z.ZodTypeAny;
+    let jsonType: Record<string, unknown>;
+
+    switch (attr.type) {
+      case "string":
+      case "richtext":
+      case "color":
+        zodType = z.string();
+        if (attr["minLength"] !== undefined) zodType = (zodType as z.ZodString).min(attr["minLength"]);
+        if (attr["maxLength"] !== undefined) zodType = (zodType as z.ZodString).max(attr["maxLength"]);
+        if (attr["enum"]) zodType = z.enum(attr["enum"] as [string, ...string[]]);
+        jsonType = { type: "string" };
+        if (attr["minLength"] !== undefined) jsonType["minLength"] = attr["minLength"];
+        if (attr["maxLength"] !== undefined) jsonType["maxLength"] = attr["maxLength"];
+        if (attr["enum"]) jsonType["enum"] = attr["enum"];
+        break;
+      case "number":
+        zodType = z.number();
+        if (attr["min"] !== undefined) zodType = (zodType as z.ZodNumber).min(attr["min"]);
+        if (attr["max"] !== undefined) zodType = (zodType as z.ZodNumber).max(attr["max"]);
+        jsonType = { type: "number" };
+        if (attr["min"] !== undefined) jsonType["minimum"] = attr["min"];
+        if (attr["max"] !== undefined) jsonType["maximum"] = attr["max"];
+        break;
+      case "boolean":
+        zodType = z.boolean();
+        jsonType = { type: "boolean" };
+        break;
+      case "link":
+        zodType = z.object({ label: z.string(), href: z.string() });
+        jsonType = { type: "object", properties: { label: { type: "string" }, href: { type: "string" } }, required: ["label", "href"] };
+        break;
+      case "image":
+        zodType = z.object({ src: z.string(), alt: z.string() });
+        jsonType = { type: "object", properties: { src: { type: "string" }, alt: { type: "string" } }, required: ["src", "alt"] };
+        break;
+      case "list":
+        zodType = z.array(z.any());
+        jsonType = { type: "array" };
+        break;
+      default:
+        zodType = z.any();
+        jsonType = {};
+    }
+
+    if (attr["default"] !== undefined) zodType = zodType.default(attr["default"]);
+    if (!attr["required"]) zodType = zodType.optional();
+
+    properties[name] = zodType;
+    jsonProperties[name] = jsonType;
+
+    if (attr["required"]) required.push(name);
+  }
+
+  const zodSchema = z.object(properties);
+  const jsonSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] } = {
+    type: "object",
+    properties: jsonProperties,
+  };
+  if (required.length > 0) jsonSchema.required = required;
+
+  return { zodSchema, jsonSchema };
+}
+
 export const PersonSchema = z.object({
   name: z.string(),
   email: z.string().email().optional(),
@@ -191,6 +302,13 @@ const blockBaseShape = {
  * A backend module: AI/data processing, forms, Stripe checkout, booking, etc.
  * This is the v1 Block shape.
  */
+export const CapabilityPermissionsSchema = z.object({
+  network: z.boolean().default(false),
+  secrets: z.array(z.string()).default([]),
+});
+
+export type CapabilityPermissions = z.infer<typeof CapabilityPermissionsSchema>;
+
 export const CapabilityBlockSchema = z.object({
   ...blockBaseShape,
   kind: z.literal("capability"),
@@ -200,6 +318,20 @@ export const CapabilityBlockSchema = z.object({
   inputs: z.array(z.string()).default([]),
   outputs: z.array(z.string()).default([]),
   capabilities: z.array(BlockCapabilitySchema).default([]),
+  // D5: typed contract as MCP tool (input/output in attribute format, §3).
+  input: z.record(z.string(), z.any()).default({}),
+  output: z.record(z.string(), z.any()).default({}),
+  permissions: CapabilityPermissionsSchema.default({ network: false, secrets: [] }),
+  // Reserved (format only, not implemented): runtime placement for AI/gamification.
+  placement: z.enum(["server", "browser"]).default("server"),
+  models: z.array(z.object({ id: z.string(), source: z.string().optional(), license: z.string().optional() })).default([]),
+  assets: z.array(z.string()).default([]),
+  game: z.object({
+    xpCost: z.number().optional(),
+    unlockCondition: z.string().optional(),
+    icon: z.string().optional(),
+    visualization: z.string().optional(),
+  }).optional(),
 });
 
 export type CapabilityBlockManifest = z.infer<typeof CapabilityBlockSchema>;
@@ -304,7 +436,9 @@ export const RendererRefSchema = z.object({
 
 export type RendererRef = z.infer<typeof RendererRefSchema>;
 
-export const RendererTargetSchema = z.enum(["web", "native", "tv"]);
+// "canvas" is reserved for gamification/pixel rendering (Pixel Office Kit and friends).
+// It is declared here so the format is stable; no renderer implements it yet.
+export const RendererTargetSchema = z.enum(["web", "native", "tv", "canvas"]);
 export type RendererTarget = z.infer<typeof RendererTargetSchema>;
 
 export const RenderersSchema = z
@@ -577,6 +711,114 @@ export const CircuitSchema = z.object({
 export type CircuitManifest = z.infer<typeof CircuitSchema>;
 
 // ============================================================================
+// v2 schemas (manifestVersion: 2 required)
+// ============================================================================
+
+export const BlockV2Schema = BlockSchema;
+export type BlockV2Manifest = z.infer<typeof BlockV2Schema>;
+
+export const KitV2Schema = KitSchema;
+export type KitV2Manifest = z.infer<typeof KitV2Schema>;
+
+export const CircuitV2Schema = CircuitSchema;
+export type CircuitV2Manifest = z.infer<typeof CircuitV2Schema>;
+
+export const ThemeV2Schema = ThemeSchema;
+export type ThemeV2 = z.infer<typeof ThemeV2Schema>;
+
+export const PageV2Schema = KitPageSchema;
+export type PageV2 = z.infer<typeof PageV2Schema>;
+
+export const BoardV2Schema = BoardTemplateSchema;
+export type BoardV2 = z.infer<typeof BoardV2Schema>;
+
+// ============================================================================
+// parseAny — accept v1 manifests and upgrade them in memory to v2, with warnings
+// ============================================================================
+
+export interface ParseAnyResult<T> {
+  value: T;
+  warnings: string[];
+  upgraded: boolean;
+}
+
+/** Alias for parseAnyBlock, matching the plan's parseAny() naming. */
+export const parseAny = parseAnyBlock;
+
+export function parseAnyBlock(input: unknown): ParseAnyResult<BlockManifest> {
+  const warnings: string[] = [];
+  let upgraded = false;
+  const raw = (input && typeof input === "object" ? { ...(input as Record<string, unknown>) } : {}) as Record<string, unknown>;
+
+  if (raw["manifestVersion"] === undefined) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion missing; upgraded to 2");
+    upgraded = true;
+  }
+  if (raw["manifestVersion"] === 1) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion 1 upgraded to 2");
+    upgraded = true;
+  }
+  if (raw["kind"] === undefined) {
+    raw["kind"] = "capability";
+    warnings.push("kind missing; treated as capability Block (v1 shape)");
+    upgraded = true;
+  }
+
+  const result = BlockSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(result.error.issues.map((i) => i.message).join("; "));
+  }
+  return { value: result.data, warnings, upgraded };
+}
+
+export function parseAnyKit(input: unknown): ParseAnyResult<KitManifest> {
+  const warnings: string[] = [];
+  let upgraded = false;
+  const raw = (input && typeof input === "object" ? { ...(input as Record<string, unknown>) } : {}) as Record<string, unknown>;
+
+  if (raw["manifestVersion"] === undefined) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion missing; upgraded to 2");
+    upgraded = true;
+  }
+  if (raw["manifestVersion"] === 1) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion 1 upgraded to 2");
+    upgraded = true;
+  }
+
+  const result = KitSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(result.error.issues.map((i) => i.message).join("; "));
+  }
+  return { value: result.data, warnings, upgraded };
+}
+
+export function parseAnyCircuit(input: unknown): ParseAnyResult<CircuitManifest> {
+  const warnings: string[] = [];
+  let upgraded = false;
+  const raw = (input && typeof input === "object" ? { ...(input as Record<string, unknown>) } : {}) as Record<string, unknown>;
+
+  if (raw["manifestVersion"] === undefined) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion missing; upgraded to 2");
+    upgraded = true;
+  }
+  if (raw["manifestVersion"] === 1) {
+    raw["manifestVersion"] = 2;
+    warnings.push("manifestVersion 1 upgraded to 2");
+    upgraded = true;
+  }
+
+  const result = CircuitSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(result.error.issues.map((i) => i.message).join("; "));
+  }
+  return { value: result.data, warnings, upgraded };
+}
+// ============================================================================
 // Usage + Logbook
 // ============================================================================
 
@@ -661,3 +903,33 @@ export type RegistryBundle = {
   kits: KitRegistry;
   circuits: CircuitRegistry;
 };
+
+// ============================================================================
+// Deploy schema (shared with Story 10.2, BCM API)
+// ============================================================================
+
+export const DeployEnvironmentSchema = z.enum(["development", "staging", "production"]);
+export type DeployEnvironment = z.infer<typeof DeployEnvironmentSchema>;
+
+export const DeployRequestSchema = z.object({
+  projectId: z.string().min(1),
+  siteId: z.string().min(1),
+  environment: DeployEnvironmentSchema.default("development"),
+  message: z.string().optional(),
+});
+
+export type DeployRequest = z.infer<typeof DeployRequestSchema>;
+
+export const DeployResponseSchema = z.object({
+  deployId: z.string().min(1),
+  status: z.enum(["queued", "building", "deployed", "failed"]),
+  url: z.string().url().optional(),
+});
+
+export type DeployResponse = z.infer<typeof DeployResponseSchema>;
+
+// ============================================================================
+// Re-exports: errors
+// ============================================================================
+
+export * from "./errors.js";
