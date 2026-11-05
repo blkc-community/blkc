@@ -364,3 +364,17 @@ describe("UI Blocks written with attributes (D3, D4)", () => {
     expect(value.renderers.canvas?.export).toBe("y");
   });
 });
+
+describe("richtext attributes and theme presets", () => {
+  it("richtext accepts TipTap JSON and an HTML string, and nothing else", () => {
+    const { zodSchema } = compileAttributes({ body: { type: "richtext", required: true } });
+    expect(zodSchema.safeParse({ body: { type: "doc", content: [] } }).success).toBe(true);
+    expect(zodSchema.safeParse({ body: "<p>x</p>" }).success).toBe(true);
+    expect(zodSchema.safeParse({ body: 3 }).success).toBe(false);
+  });
+
+  it("theme presets accept short slugs such as md", () => {
+    const palette = [{ slug: "md", name: "Medium", size: "1rem" }];
+    expect(ThemeV2Schema.safeParse({ settings: { spacing: { spacingSizes: palette } } }).success).toBe(true);
+  });
+});

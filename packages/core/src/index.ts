@@ -160,8 +160,12 @@ export function compileAttributes(attributes: AttributesMap): {
     let jsonType: Record<string, unknown>;
 
     switch (attr.type) {
-      case "string":
       case "richtext":
+        // Q1: TipTap JSON. An HTML string is accepted too; renderers sanitise both.
+        zodType = z.union([z.string(), z.looseObject({ type: z.string() })]);
+        jsonType = { anyOf: [{ type: "string" }, { type: "object", required: ["type"] }] };
+        break;
+      case "string":
       case "color":
         zodType = z.string();
         if (attr["minLength"] !== undefined) zodType = (zodType as z.ZodString).min(attr["minLength"]);
@@ -528,7 +532,8 @@ export const KitBlockRefSchema = z.object({
 
 export type KitBlockRef = z.infer<typeof KitBlockRefSchema>;
 
-const presetShape = { slug: IdentifierSchema, name: z.string() };
+// Preset slugs follow theme.json, where short names such as "md" are normal.
+const presetShape = { slug: z.string().regex(/^[a-z0-9-]+$/), name: z.string() };
 
 /**
  * A subset of WordPress theme.json (v3). Unknown keys are kept, so a real theme.json
