@@ -1,0 +1,17 @@
+/*
+ * The compiled stylesheet for the renderer: `@blkc-code/render-web/styles.css`.
+ * Use it when a project has no Tailwind of its own. The token mapping matches
+ * blkcThemeCss() in @blkc-code/tailwind-preset; see theme.css.
+ */
+@import "tailwindcss" source(none);
+@source "./";
+
+@import "./theme.css";
+
+/* Kit themes set these variables on .blkc-page, so the page paints itself. */
+.blkc-page {
+  min-height: 100vh;
+  background-color: var(--blkc-color-background, #ffffff);
+  color: var(--blkc-color-text, #1a1a1a);
+  font-family: var(--blkc-font-family, system-ui, sans-serif);
+}

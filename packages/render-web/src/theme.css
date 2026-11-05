@@ -1,0 +1,28 @@
+/* Tailwind theme for the renderer classes. Generated values match blkcThemeCss() in
+   @blkc-code/tailwind-preset, and a test keeps the two in step. */
+@theme inline {
+  --color-primary: var(--blkc-color-primary, #0066cc);
+  --color-primary-foreground: var(--blkc-color-background, #ffffff);
+  --color-secondary: var(--blkc-color-secondary, #6c757d);
+  --color-secondary-foreground: var(--blkc-color-background, #ffffff);
+  --color-background: var(--blkc-color-background, #ffffff);
+  --color-foreground: var(--blkc-color-text, #1a1a1a);
+  --color-muted: var(--blkc-color-background, #ffffff);
+  --color-muted-foreground: var(--blkc-color-text-secondary, #6c757d);
+  --color-border: var(--blkc-color-border, #e0e0e0);
+  --color-input: var(--blkc-color-border, #e0e0e0);
+  --color-accent: var(--blkc-color-primary, #0066cc);
+  --color-accent-foreground: var(--blkc-color-background, #ffffff);
+  --color-ring: var(--blkc-color-primary, #0066cc);
+  --radius-blkc: var(--blkc-border-radius, 8px);
+  --container-blkc: var(--blkc-max-width, 1200px);
+  --font-blkc: var(--blkc-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif);
+  --shadow-blkc: var(--blkc-shadow-md, 0 4px 6px rgba(0, 0, 0, 0.1));
+  --shadow-blkc-sm: var(--blkc-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+  --shadow-blkc-lg: var(--blkc-shadow-lg, 0 10px 15px rgba(0, 0, 0, 0.1));
+  --spacing-blkc-xs: var(--blkc-spacing-xs, 0.25rem);
+  --spacing-blkc-sm: var(--blkc-spacing-sm, 0.5rem);
+  --spacing-blkc-md: var(--blkc-spacing-md, 1rem);
+  --spacing-blkc-lg: var(--blkc-spacing-lg, 2rem);
+  --spacing-blkc-xl: var(--blkc-spacing-xl, 4rem);
+}

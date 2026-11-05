@@ -34,6 +34,7 @@ jobs:
         run: |
           npm run build --workspace=packages/core
           npm run build --workspace=packages/logbook
+          npm run build --workspace=packages/render-web
           npm run build --workspace=packages/cli
       - name: Pack
         run: npm pack --workspace=packages/cli --pack-destination "$RUNNER_TEMP"
@@ -60,3 +61,8 @@ jobs:
           $BLKC new circuit circuit-demo
           $BLKC check
           node --test
+          # The bundled CLI must render a real page, with nothing else installed.
+          $BLKC dev --no-open --port 4179 &
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -sf http://localhost:4179/ >/dev/null && break; sleep 1; done
+          curl -sf "http://localhost:4179/frame?item=kits/pixel-office" | grep -q "blkc-hero"
+          kill $! || true

@@ -262,7 +262,7 @@ export function registerNewCommand(program: Command): void {
         }
 
         spinner.succeed(`Created ${kind} ${id} in ${path.relative(root, dir)}`);
-        console.log(chalk.gray(`Run 'blkc check' to validate.`));
+        console.log(chalk.gray(`Run 'blkc dev' to preview it, or 'blkc check' to validate.`));
       } catch (error) {
         spinner.fail(`Failed to scaffold: ${error}`);
         process.exit(1);

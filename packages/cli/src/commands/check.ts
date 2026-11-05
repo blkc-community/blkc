@@ -59,7 +59,7 @@ async function walkManifests(root: string): Promise<string[]> {
   return found;
 }
 
-async function discover(targets: string[]): Promise<string[]> {
+export async function discover(targets: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const t of targets) {
     const abs = path.resolve(process.cwd(), t);
@@ -78,7 +78,7 @@ function errorCode(code: string): { code: string; title: string; cause: string; 
   return e;
 }
 
-function kindOf(file: string): FileKind {
+export function kindOf(file: string): FileKind {
   const base = path.basename(file);
   if (base === "kit.json") return "kit";
   if (base === "circuit.json") return "circuit";
@@ -92,7 +92,7 @@ function kindOf(file: string): FileKind {
   return "block";
 }
 
-interface CheckIssue {
+export interface CheckIssue {
   code: string;
   file: string;
   field: string;
@@ -129,7 +129,7 @@ interface FileResult {
   warnings: string[];
 }
 
-async function validateOne(file: string): Promise<FileResult> {
+export async function validateOne(file: string): Promise<FileResult> {
   const rel = path.relative(process.cwd(), file);
   const fail = (issues: CheckIssue[], warnings: string[] = []): FileResult => ({ ok: false, issues, upgraded: false, warnings });
 

@@ -23,6 +23,7 @@ import {
 } from "./types.js";
 import * as utils from "./utils.js";
 import { kitPageStyle } from "./kit.js";
+import { ManifestPreview } from "./preview.js";
 
 // ============================================================================
 // HTML Rendering (for SSG and static export)
@@ -182,7 +183,53 @@ function generateHtmlDocument(
 
 // ============================================================================
 
+// ============================================================================
+// Manifest preview (blkc dev and the playground)
+// ============================================================================
+
+/** Draw a Block, a Kit page or a Circuit to an HTML fragment. */
+function renderManifestToHTML(manifest: unknown, options: { page?: string } = {}): string {
+  return renderToStaticMarkup(<ManifestPreview manifest={manifest} page={options.page} />);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`).replace(/&#38;/g, "&amp;");
+}
+
+/** The web font a Kit names first, as a Google Fonts link, if it names one in quotes. */
+function themeFontLink(manifest: unknown): string {
+  const theme = (manifest as { theme?: { settings?: { typography?: { fontFamilies?: { fontFamily?: unknown }[] } } } } | null)?.theme;
+  const family = theme?.settings?.typography?.fontFamilies?.[0]?.fontFamily;
+  const name = typeof family === "string" ? /^\s*['"]([^'"]+)['"]/.exec(family)?.[1] : undefined;
+  if (!name) return "";
+  return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${escapeHtml(encodeURIComponent(name))}&amp;display=swap">`;
+}
+
+/**
+ * A complete HTML page for a manifest. Pass the stylesheet in `head`, as a
+ * <style> holding @blkc-code/render-web/styles.css or a <link> to it. `head` is
+ * trusted markup; everything taken from the manifest is escaped.
+ */
+function renderManifestDocument(manifest: unknown, options: { page?: string; head?: string; lang?: string } = {}): string {
+  const name = (manifest as { name?: unknown } | null)?.name;
+  const title = typeof name === "string" ? name : "BLKC preview";
+  return `<!doctype html>
+<html lang="${escapeHtml(options.lang ?? "en")}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+${themeFontLink(manifest)}
+${options.head ?? ""}
+</head>
+<body style="margin:0">${renderManifestToHTML(manifest, options)}</body>
+</html>
+`;
+}
+
 export {
+  renderManifestToHTML,
+  renderManifestDocument,
   renderBlockToHTML,
   renderBlocksToHTML,
   renderToHTML,
