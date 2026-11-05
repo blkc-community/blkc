@@ -714,13 +714,16 @@ export type CircuitManifest = z.infer<typeof CircuitSchema>;
 // v2 schemas (manifestVersion: 2 required)
 // ============================================================================
 
-export const BlockV2Schema = BlockSchema;
+export const BlockV2Schema = z.union([
+  UiBlockSchema.safeExtend({ manifestVersion: z.literal(2) }),
+  CapabilityBlockSchema.extend({ manifestVersion: z.literal(2) }),
+]);
 export type BlockV2Manifest = z.infer<typeof BlockV2Schema>;
 
-export const KitV2Schema = KitSchema;
+export const KitV2Schema = KitSchema.safeExtend({ manifestVersion: z.literal(2) });
 export type KitV2Manifest = z.infer<typeof KitV2Schema>;
 
-export const CircuitV2Schema = CircuitSchema;
+export const CircuitV2Schema = CircuitSchema.safeExtend({ manifestVersion: z.literal(2) });
 export type CircuitV2Manifest = z.infer<typeof CircuitV2Schema>;
 
 export const ThemeV2Schema = ThemeSchema;
