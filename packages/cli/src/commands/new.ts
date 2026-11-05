@@ -12,6 +12,7 @@ import ora from "ora";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { IdentifierSchema, errorCodeDocsUrl, findErrorCode } from "@blkc-code/core";
+import { KIT_TEMPLATES } from "../kit-templates.js";
 
 const DEFAULT_LICENSE = "MIT";
 
@@ -241,6 +242,8 @@ export function registerNewCommand(program: Command): void {
             "block.test.mjs": testFile("block.json", id, UI_BLOCK_EXTRA),
             "README.md": readme,
           });
+        } else if (kind === "kit" && Object.hasOwn(KIT_TEMPLATES, id)) {
+          await write(dir, KIT_TEMPLATES[id]);
         } else if (kind === "kit") {
           await write(dir, {
             "kit.json": kitJson(id),
