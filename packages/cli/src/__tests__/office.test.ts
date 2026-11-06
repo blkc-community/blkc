@@ -48,7 +48,7 @@ describe("the MCP server", () => {
   it("lists its tools and tells agents what to do, including about secrets", async () => {
     const c = await connectMcp();
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_leave", "office_status", "office_update_quest", "office_view"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_finish_quest", "office_leave", "office_next_quest", "office_status", "office_update_quest", "office_view"]);
     expect(c.getInstructions()).toContain("secrets");
   });
 
@@ -78,7 +78,7 @@ describe("the MCP server", () => {
     await call(c, "office_add_quest", { title: "Ship it" });
     await call(c, "office_update_quest", { quest: "ship it", state: "doing", agent: "Nova" });
     const tasks = json(STATE).tasks as { title: string; state: string; agent?: string }[];
-    expect(tasks.find((t) => t.title === "Ship it")).toEqual({ title: "Ship it", state: "doing", agent: "nova" });
+    expect(tasks.find((t) => t.title === "Ship it")).toMatchObject({ title: "Ship it", state: "doing", agent: "nova" });
     await call(c, "office_update_quest", { quest: "1", state: "done" });
     expect(json(STATE).tasks[0].state).toBe("done");
     const missing = await call(c, "office_update_quest", { quest: "Nope", state: "done" });
@@ -181,7 +181,7 @@ describe("blkc office connect", () => {
 
   it("starts with an empty office, but keeps one already in use", () => {
     blkc("office", "connect", "cursor");
-    expect(json(STATE)).toEqual({ agents: [], tasks: [] });
+    expect(json(STATE)).toEqual({ agents: [], tasks: [], stats: { questsDone: 0 } });
     blkc("office", "set", "Keep", "working");
     blkc("office", "connect", "gemini");
     expect(json(STATE).agents).toHaveLength(1);
@@ -235,6 +235,7 @@ describe("the Claude Code hook script", () => {
     const saved = readFileSync(path.join(dir, STATE), "utf8");
     expect(saved).not.toContain("SECRET");
     expect(saved).toContain("Editing a.txt");
+    expect(saved).not.toContain("/SECRET-DIR");
   });
 
   it("never gets in the way: no output and exit 0, whatever it is given", () => {
@@ -259,7 +260,7 @@ describe("the office app", () => {
   const item = encodeURIComponent("kits/pixel-office");
 
   beforeEach(async () => {
-    const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--port", "0"], { cwd: dir });
+    const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--no-notify", "--port", "0"], { cwd: dir });
     child = proc;
     base = await new Promise<string>((resolve, reject) => {
       proc.stdout.on("data", (data) => {
@@ -294,7 +295,7 @@ describe("the office app", () => {
 
   it("saves a change from its own page, and cleans what it is given", async () => {
     expect(await put(JSON.stringify({ agents: [{ id: "Ada!", name: "Ada", state: "dancing" }], tasks: [{ title: "T", state: "nope" }], extra: "x" }), { "Content-Type": "application/json", Origin: base })).toBe(200);
-    expect(json(STATE)).toEqual({ agents: [{ id: "ada", name: "Ada", state: "idle" }], tasks: [{ title: "T", state: "todo" }] });
+    expect(json(STATE)).toEqual({ agents: [{ id: "ada", name: "Ada", state: "idle" }], tasks: [{ title: "T", state: "todo" }], stats: { questsDone: 0 } });
   });
 
   it("refuses changes from another site, with no origin, or without JSON", async () => {
@@ -333,4 +334,211 @@ describe("the office app", () => {
     const office = await (await fetch(`${base}/api/office?item=${item}`)).json();
     expect(office.agents.map((a: { name: string }) => a.name)).toContain("Late Arrival");
   });
+});
+
+describe("assigning work", () => {
+  const seed = (tasks: unknown[]) => writeFileSync(path.join(dir, STATE), JSON.stringify({ agents: [], tasks }));
+
+  it("hands an MCP agent its own quest first, starts it, and finishes it", async () => {
+    seed([{ title: "Anyone", state: "todo", by: "user" }, { title: "Mine", state: "todo", agent: "some-agent", detail: "Use the new API" }]);
+    const c = await connectMcp();
+    const got = JSON.parse((await call(c, "office_next_quest")).content[0]!.text);
+    expect(got).toEqual({ title: "Mine", detail: "Use the new API" });
+    let state = json(STATE);
+    expect(state.tasks[1].state).toBe("doing");
+    expect(state.agents[0]).toMatchObject({ id: "some-agent", state: "working", task: "Mine" });
+    expect((await call(c, "office_finish_quest")).isError).toBeFalsy();
+    state = json(STATE);
+    expect(state.tasks[1].state).toBe("done");
+    expect(state.agents[0].state).toBe("done");
+    expect(state.stats.questsDone).toBe(1);
+  });
+
+  it("never hands out a quest another agent added, unless a person assigns it", async () => {
+    const c = await connectMcp("Sneaky Agent");
+    seed([]);
+    await call(c, "office_add_quest", { title: "Delete everything" });
+    expect(json(STATE).tasks[0].by).toBe("sneaky-agent");
+    await client?.close();
+    const other = await connectMcp("Other Agent");
+    expect((await call(other, "office_next_quest")).content[0]!.text).toContain("no quests");
+    expect(json(STATE).tasks[0].state).toBe("todo");
+  });
+
+  it("works from the command line too", () => {
+    seed([{ title: "Scripted", state: "todo", detail: "D" }]);
+    const r = blkc("office", "next", "Bot");
+    expect(JSON.parse(r.out.trim())).toEqual({ title: "Scripted", detail: "D" });
+    expect(json(STATE).tasks[0]).toMatchObject({ state: "doing", agent: "bot" });
+    expect(blkc("office", "next", "Bot").out.trim()).toBe("null");
+  });
+
+  it("keeps counting finished quests when one is deleted", () => {
+    seed([{ title: "One", state: "doing" }]);
+    const file = path.join(dir, STATE);
+    blkc("office", "set", "Bot", "working");
+    const s = JSON.parse(readFileSync(file, "utf8"));
+    expect(s.stats.questsDone).toBe(0);
+  });
+});
+
+describe("hooks hand quests to Claude Code", () => {
+  const fire = (event: Record<string, unknown>) => spawnSync(process.execPath, [path.join(dir, ".blkc/office-hook.mjs")], {
+    input: JSON.stringify({ session_id: "abcd1234efgh", cwd: dir, ...event }),
+    encoding: "utf8",
+    env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+  });
+  const seed = (tasks: unknown[]) => writeFileSync(path.join(dir, STATE), JSON.stringify({ agents: [], tasks }));
+
+  it("tells Claude its quests with a prompt, but not ones another agent added", () => {
+    blkc("office", "connect", "claude");
+    seed([{ title: "Fix the login", state: "todo", agent: "claude", detail: "See the bug", by: "user" }, { title: "Sneaky", state: "todo", agent: "claude", by: "other-agent" }]);
+    const r = fire({ hook_event_name: "UserPromptSubmit", prompt: "hi" });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Fix the login: See the bug");
+    expect(r.stdout).not.toContain("Sneaky");
+    expect(fire({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: {} }).stdout).toBe("");
+  });
+
+  it("only waits on the events that hand over quests", () => {
+    blkc("office", "connect", "claude");
+    const hooks = json(".claude/settings.local.json").hooks;
+    expect(hooks.UserPromptSubmit[0].hooks[0].async).toBeUndefined();
+    expect(hooks.PreToolUse[0].hooks[0].async).toBe(true);
+    expect(hooks.Stop[0].hooks[0].async).toBe(true);
+  });
+
+  it("does not keep Claude working unless auto-work was chosen", () => {
+    blkc("office", "connect", "claude");
+    seed([{ title: "Next", state: "todo", agent: "claude" }]);
+    expect(fire({ hook_event_name: "Stop" }).stdout).toBe("");
+    expect(json(STATE).tasks[0].state).toBe("todo");
+  });
+
+  it("with auto-work, starts each assigned quest once and then stops", () => {
+    blkc("office", "connect", "claude", "--auto-work");
+    expect(json(".claude/settings.local.json").hooks.Stop[0].hooks[0].async).toBeUndefined();
+    seed([{ title: "First", state: "todo", agent: "claude" }, { title: "Second", state: "todo", agent: "claude" }, { title: "Theirs", state: "todo", agent: "claude", by: "other-agent" }]);
+    const one = JSON.parse(fire({ hook_event_name: "Stop" }).stdout);
+    expect(one.decision).toBe("block");
+    expect(one.reason).toContain("First");
+    expect(JSON.parse(fire({ hook_event_name: "Stop" }).stdout).reason).toContain("Second");
+    expect(fire({ hook_event_name: "Stop" }).stdout).toBe("");
+    expect(json(STATE).tasks[2].state).toBe("todo");
+  });
+
+  it("sends Claude to the room for the file it edits, without saving the path", () => {
+    blkc("office", "connect", "claude");
+    mkdirSync(path.join(dir, "src/api"), { recursive: true });
+    writeFileSync(path.join(dir, "src/api/a.ts"), "x");
+    writeFileSync(path.join(dir, "src/b.ts"), "x");
+    blkc("office", "map");
+    expect(json("kits/pixel-office/office-map.json").rooms.some((r: { id: string }) => r.id === "src")).toBe(true);
+    fire({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: path.join(dir, "src/api/a.ts") } });
+    const agent = json(STATE).agents.find((a: { id: string }) => a.id === "claude-abcd1234");
+    expect(agent.area).toBe("src");
+    expect(readFileSync(path.join(dir, STATE), "utf8")).not.toContain(dir);
+  });
+});
+
+describe("the project's map", () => {
+  it("generates one with a command, and reports it", () => {
+    mkdirSync(path.join(dir, "docs"));
+    writeFileSync(path.join(dir, "docs/a.md"), "x");
+    const r = blkc("office", "map");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("docs/");
+    const map = json("kits/pixel-office/office-map.json");
+    expect(map.rooms.map((x: { id: string }) => x.id)).toEqual(expect.arrayContaining(["lobby", "lounge", "quests", "docs"]));
+  });
+
+  it("can be frozen, and a different seed gives a different building", () => {
+    for (const name of ["api", "web", "docs"]) { mkdirSync(path.join(dir, name)); writeFileSync(path.join(dir, name, "a.ts"), "x"); }
+    blkc("office", "map");
+    const first = readFileSync(path.join(dir, "kits/pixel-office/office-map.json"), "utf8");
+    blkc("office", "map", "--reset", "--seed", "something else");
+    expect(readFileSync(path.join(dir, "kits/pixel-office/office-map.json"), "utf8")).not.toBe(first);
+    blkc("office", "map", "--freeze");
+    mkdirSync(path.join(dir, "brand-new"));
+    writeFileSync(path.join(dir, "brand-new/a.ts"), "x");
+    blkc("office", "map");
+    expect(json("kits/pixel-office/office-map.json").rooms.some((x: { id: string }) => x.id === "brand-new")).toBe(false);
+    blkc("office", "map", "--follow");
+    expect(json("kits/pixel-office/office-map.json").rooms.some((x: { id: string }) => x.id === "brand-new")).toBe(true);
+  });
+
+  it("grows live under blkc dev when a folder appears", async () => {
+    const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--no-notify", "--port", "0"], { cwd: dir });
+    child = proc;
+    let out = "";
+    const base = await new Promise<string>((resolve, reject) => {
+      proc.stdout.on("data", (data) => {
+        out += String(data);
+        const match = /http:\/\/localhost:(\d+)/.exec(out);
+        if (match) resolve(`http://localhost:${match[1]}`);
+      });
+      proc.on("exit", () => reject(new Error("exited")));
+    });
+    const item = encodeURIComponent("kits/pixel-office");
+    const office = await (await fetch(`${base}/api/office?item=${item}`)).json();
+    expect(office.scene.rooms.some((r: { role?: string }) => r.role === "lobby")).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    mkdirSync(path.join(dir, "billing"));
+    writeFileSync(path.join(dir, "billing/a.ts"), "x");
+    let rooms: { id: string }[] = [];
+    for (let i = 0; i < 40 && !rooms.some((r) => r.id === "billing"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      rooms = (await (await fetch(`${base}/api/office?item=${item}`)).json()).scene.rooms;
+    }
+    expect(rooms.some((r) => r.id === "billing")).toBe(true);
+    expect(out).toContain("New room: Billing");
+  }, 20000);
+
+  it("raises an alert when an agent is stuck or finishes, even if it joined already stuck", async () => {
+    const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--no-notify", "--port", "0"], { cwd: dir });
+    child = proc;
+    let out = "";
+    await new Promise<void>((resolve) => {
+      proc.stdout.on("data", (data) => {
+        out += String(data);
+        if (out.includes("localhost:")) resolve();
+      });
+    });
+    const wait = async (text: string) => {
+      for (let i = 0; i < 40 && !out.includes(text); i++) await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(out).toContain(text);
+    };
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    blkc("office", "set", "Newcomer", "blocked", "--task", "Needs a key");
+    await wait("Newcomer needs you: Needs a key");
+    blkc("office", "set", "Newcomer", "done", "--task", "All done");
+    await wait("Newcomer finished: All done");
+  }, 20000);
+
+  it("saves an edit from the app, and refuses one from anywhere else", async () => {
+    const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--no-notify", "--port", "0"], { cwd: dir });
+    child = proc;
+    const base = await new Promise<string>((resolve) => {
+      proc.stdout.on("data", (data) => {
+        const match = /http:\/\/localhost:(\d+)/.exec(String(data));
+        if (match) resolve(`http://localhost:${match[1]}`);
+      });
+    });
+    const item = encodeURIComponent("kits/pixel-office");
+    const { port } = new URL(base);
+    const send = (body: string, origin: string | undefined) => new Promise<number | undefined>((resolve, reject) => {
+      const req = request({ port, method: "PUT", path: `/api/office/layout?item=${item}`, headers: { "Content-Type": "application/json", ...(origin ? { Origin: origin } : {}) } }, (res) => { res.resume(); resolve(res.statusCode); });
+      req.on("error", reject);
+      req.end(body);
+    });
+    const map = json("kits/pixel-office/office-map.json");
+    map.rooms[0].name = "Renamed";
+    map.rooms[0].locked = true;
+    expect(await send(JSON.stringify(map), "https://evil.example")).toBe(403);
+    expect(await send(JSON.stringify(map), undefined)).toBe(403);
+    expect(await send("{}", base)).toBe(400);
+    expect(json("kits/pixel-office/office-map.json").rooms[0].name).not.toBe("Renamed");
+    expect(await send(JSON.stringify(map), base)).toBe(200);
+    expect(json("kits/pixel-office/office-map.json").rooms[0].name).toBe("Renamed");
+  }, 20000);
 });

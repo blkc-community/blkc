@@ -28,6 +28,28 @@ The `office` Block draws a living pixel-art office in a canvas, from JSON. Agent
 
 `blkc dev` on a Kit with an `office` Block opens a full-screen app at `/office`. Add and edit agents, move quests on the board, and changes save to `office-state.json` beside the Kit. Moving a quest with an owner to Doing or Done updates that agent too.
 
+### Your project is the map
+
+`blkc dev` builds a pixel-art office from your project, unique to it: its seed comes from the project's name, and its rooms from your folders. Folders shape their rooms too, so docs get bookshelves, API folders get server racks and assets become a garden.
+
+The map changes as the project does. New folders add rooms, bigger folders grow and get more desks, and a deleted folder's room closes, or stays as an empty corridor if others need it to get around. Existing rooms stay where they are. Agents walk to the room for the folder they're working in.
+
+In the app's Build tab you can draw rooms, add doors, place and move furniture, and link rooms to folders. Once you've edited a room, the generator leaves it alone. Finishing quests levels up the office and unlocks extra furniture.
+
+```bash
+npx @blkc-code/cli@latest office map            # generate or update it now
+npx @blkc-code/cli@latest office map --freeze   # stop it following the project (--follow to resume)
+npx @blkc-code/cli@latest office map --reset    # start again, discarding your edits
+```
+
+Only folder names and file counts are read, never file contents. The map and the office's state are saved beside the Kit, as `office-map.json` and `office-state.json`.
+
+### Alerts and assigning work
+
+When an agent gets stuck or finishes, you get a desktop notification and a sound while `blkc dev` runs. Use `--no-notify` to turn off the notifications.
+
+Add quests in the app and assign them to an agent. MCP agents pick them up with `office_next_quest` and finish with `office_finish_quest`, and scripts can run `blkc office next <agent>`. Claude Code gets its quests when a session starts and with each prompt. With `office connect claude --auto-work` it also starts the next one by itself at the end of a turn. A quest another agent added is never handed out until a person assigns it.
+
 ### Connect your agents
 
 Any agent on your machine can join. Nothing here is tied to one vendor:

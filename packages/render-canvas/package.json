@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/render-canvas",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Canvas renderer for BLKC: draws canvas Blocks such as the Pixel Office",
   "main": "dist/index.js",

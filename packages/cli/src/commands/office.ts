@@ -14,11 +14,13 @@ import path from "node:path";
 import process from "node:process";
 import { runOfficeMcp } from "../office/mcp.js";
 import { HOOK_FILE, hookScript } from "../office/hook-script.js";
-import { AGENT_STATES, STATE_FILE, normalizeState, removeAgent, resolveKit, setAgent, updateOfficeState } from "../office/state.js";
+import { AGENT_STATES, STATE_FILE, areaForFile, evolveKitMap, nextQuest, normalizeState, readMap, removeAgent, resolveKit, setAgent, updateOfficeState, writeMap } from "../office/state.js";
 
 const SERVER_NAME = "blkc-office";
 const HOOK_COMMAND = `node "\${CLAUDE_PROJECT_DIR}/${HOOK_FILE}" || true`;
 const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd", "SubagentStart", "SubagentStop"];
+/** These can hand quests to Claude, which only works if it waits for them. */
+const SYNC_EVENTS = new Set(["SessionStart", "UserPromptSubmit"]);
 
 type Json = Record<string, unknown>;
 
@@ -55,13 +57,14 @@ const writeConfig = async (file: string, value: Json): Promise<void> => {
 const isOurHook = (group: Json): boolean =>
   ((group["hooks"] as Json[]) ?? []).some((hook) => String(hook["command"] ?? "").includes(HOOK_FILE));
 
-async function setHooks(root: string, on: boolean): Promise<void> {
+async function setHooks(root: string, on: boolean, autoWork = false): Promise<void> {
   const file = path.join(root, ".claude/settings.local.json");
   const settings = await readConfig(file);
   const hooks = (settings["hooks"] ?? {}) as Record<string, Json[]>;
   for (const event of HOOK_EVENTS) {
     const others = (hooks[event] ?? []).filter((group) => !isOurHook(group));
-    const ours = on ? [{ hooks: [{ type: "command", command: HOOK_COMMAND, async: true }] }] : [];
+    const sync = SYNC_EVENTS.has(event) || (event === "Stop" && autoWork);
+    const ours = on ? [{ hooks: [{ type: "command", command: HOOK_COMMAND, ...(sync ? {} : { async: true }) }] }] : [];
     if (others.length + ours.length > 0) hooks[event] = [...others, ...ours];
     else delete hooks[event];
   }
@@ -114,14 +117,66 @@ export function registerOfficeCommand(program: Command): void {
     .description(`Say what an agent is doing. State: ${AGENT_STATES.join(", ")}.`)
     .option("--task <words>", "What it is doing")
     .option("--role <role>", "Its role")
+    .option("--file <path>", "A file it is working on, which sends it to that room")
     .option("--kit <path>", "The Kit, if there is more than one")
-    .action(async (agent: string, state: string, options: { task?: string; role?: string; kit?: string }) => {
+    .action(async (agent: string, state: string, options: { task?: string; role?: string; file?: string; kit?: string }) => {
       try {
         const kit = await resolveKit(options.kit, process.cwd());
+        const area = options.file ? await areaForFile(kit, process.cwd(), options.file) : undefined;
         await updateOfficeState(kit, (current) => {
-          setAgent(current, { name: agent, state, task: options.task ?? "", ...(options.role ? { role: options.role } : {}) });
+          const me = setAgent(current, { name: agent, state, task: options.task ?? "", ...(options.role ? { role: options.role } : {}) });
+          if (area) me.area = area;
         });
         console.log(`${agent} is now ${state}.`);
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  office
+    .command("next <agent>")
+    .description("Pick up an agent's next quest, and print it as JSON. For scripts and agents without MCP.")
+    .option("--kit <path>", "The Kit, if there is more than one")
+    .action(async (agent: string, options: { kit?: string }) => {
+      try {
+        const kit = await resolveKit(options.kit, process.cwd());
+        let picked: { title: string; detail?: string } | undefined;
+        await updateOfficeState(kit, (current) => {
+          const me = setAgent(current, { name: agent });
+          const quest = nextQuest(current, me.id);
+          if (!quest) return;
+          quest.state = "doing";
+          quest.agent = me.id;
+          me.state = "working";
+          me.task = quest.title;
+          picked = { title: quest.title, detail: quest.detail ?? "" };
+        });
+        console.log(JSON.stringify(picked ?? null));
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  office
+    .command("map")
+    .description("Generate this project's map, or bring it up to date.")
+    .option("--reset", "Start again. This discards rooms you edited by hand")
+    .option("--seed <text>", "Use a different seed, to get a different building")
+    .option("--freeze", "Stop the map following the project")
+    .option("--follow", "Make the map follow the project again")
+    .option("--kit <path>", "The Kit, if there is more than one")
+    .action(async (options: { reset?: boolean; seed?: string; freeze?: boolean; follow?: boolean; kit?: string }) => {
+      try {
+        const root = process.cwd();
+        const kit = await resolveKit(options.kit, root);
+        if (options.freeze || options.follow) {
+          const current = await readMap(kit);
+          if (current) await writeMap(kit, { ...current, evolve: Boolean(options.follow) });
+        }
+        const { map, changes } = await evolveKitMap(kit, root, { reset: options.reset, seed: options.seed });
+        console.log(`${chalk.green("Map")}: ${map.rooms.length} rooms, ${map.furniture.length} pieces of furniture, ${map.cols}x${map.rows}${map.evolve ? "" : " (frozen)"}`);
+        for (const room of map.rooms) console.log(chalk.gray(`  ${room.name}${room.paths[0] ? ` : ${room.paths[0]}` : ""}`));
+        for (const change of changes) console.log(change);
       } catch (error) {
         fail(error);
       }
@@ -146,7 +201,8 @@ export function registerOfficeCommand(program: Command): void {
     .description("Connect an agent: claude, cursor, vscode, gemini, codex, or other.")
     .option("--kit <path>", "The Kit, if there is more than one")
     .option("--no-hooks", "Claude Code: use MCP only, without automatic status updates")
-    .action(async (agent: string | undefined, options: { kit?: string; hooks: boolean }) => {
+    .option("--auto-work", "Claude Code: start the next assigned quest by itself at the end of each turn")
+    .action(async (agent: string | undefined, options: { kit?: string; hooks: boolean; autoWork?: boolean }) => {
       try {
         const root = process.cwd();
         const kitDir = await resolveKit(options.kit, root);
@@ -177,13 +233,15 @@ export function registerOfficeCommand(program: Command): void {
 
         if (name === "claude" && options.hooks) {
           // Hooks go first in case the settings can't be read: nothing half done is left behind.
-          await setHooks(root, true);
+          await setHooks(root, true, Boolean(options.autoWork));
           await mkdir(path.join(root, ".blkc"), { recursive: true });
           const script = path.join(root, HOOK_FILE);
-          await writeFile(script, hookScript(kit));
+          await writeFile(script, hookScript(kit, Boolean(options.autoWork)));
           await chmod(script, 0o755);
           console.log(`${chalk.green("Automatic updates")} on: .claude/settings.local.json, ${HOOK_FILE}`);
-          console.log(chalk.gray("They record the kind of action and a file's name, never commands, prompts or contents."));
+          console.log(chalk.gray("They record the kind of action, a file's name and its room, never commands, prompts or contents."));
+          console.log(chalk.gray("Quests assigned to Claude are handed over when a session starts and with each prompt."));
+          if (options.autoWork) console.log(chalk.yellow("Auto-work is on: Claude starts the next assigned quest by itself when it finishes a turn."));
         } else {
           console.log(chalk.gray("Agents report through MCP, so they do it when they choose. Ask yours to use the office tools."));
         }

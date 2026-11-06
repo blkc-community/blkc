@@ -10,17 +10,26 @@ import { mkdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/pro
 import path from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { discover } from "../commands/check.js";
+import { evolveMap, roomForPath, scanProject, type OfficeMap } from "./mapgen.js";
 
 export const AGENT_STATES = ["working", "thinking", "blocked", "reviewing", "idle", "done", "away"] as const;
 export const TASK_STATES = ["todo", "doing", "done"] as const;
 export type AgentState = (typeof AGENT_STATES)[number];
 export type TaskState = (typeof TASK_STATES)[number];
 
-export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string }
-export interface Quest { title: string; state: TaskState; agent?: string }
-export interface OfficeState { agents: Agent[]; tasks: Quest[] }
+export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string; area?: string }
+export interface Quest {
+  title: string;
+  state: TaskState;
+  agent?: string;
+  detail?: string;
+  /** Who added it. A quest from another agent is never handed out automatically. */
+  by?: string;
+}
+export interface OfficeState { agents: Agent[]; tasks: Quest[]; stats: { questsDone: number } }
 
 export const STATE_FILE = "office-state.json";
+export const MAP_FILE = "office-map.json";
 const MAX_AGENTS = 40;
 const MAX_TASKS = 60;
 export const MAX_STATE_BYTES = 256 * 1024;
@@ -49,6 +58,8 @@ export function normalizeState(raw: unknown): OfficeState {
     const task = text(item["task"], 120);
     if (role) agent.role = role;
     if (task) agent.task = task;
+    const area = text(item["area"], 60);
+    if (area) agent.area = area;
     agents.push(agent);
   }
   const tasks: Quest[] = [];
@@ -58,9 +69,15 @@ export function normalizeState(raw: unknown): OfficeState {
     const quest: Quest = { title, state: TASK_STATES.includes(item["state"] as TaskState) ? (item["state"] as TaskState) : "todo" };
     const agent = slug(text(item["agent"], 60));
     if (agent) quest.agent = agent;
+    const detail = typeof item["detail"] === "string" ? (item["detail"] as string).split("\n").map((line) => text(line, 1000)).join("\n").trim().slice(0, 1000) : "";
+    if (detail) quest.detail = detail;
+    const by = text(item["by"], 60);
+    if (by) quest.by = by;
     tasks.push(quest);
   }
-  return { agents, tasks };
+  const stats = (input["stats"] ?? {}) as Json;
+  const questsDone = typeof stats["questsDone"] === "number" && stats["questsDone"] >= 0 ? Math.floor(stats["questsDone"] as number) : 0;
+  return { agents, tasks, stats: { questsDone } };
 }
 
 function readJsonSync(file: string): Json | undefined {
@@ -151,8 +168,11 @@ export async function updateOfficeState(kitDir: string, change: (state: OfficeSt
   if (!held) throw new Error("The office is busy. Try again.");
   try {
     const state = await readOfficeState(kitDir);
+    const wasDone = new Set(state.tasks.filter((task) => task.state === "done").map((task) => task.title));
     change(state);
     const next = normalizeState(state);
+    // Progress counts every quest ever finished, so deleting one doesn't lose it.
+    next.stats.questsDone += next.tasks.filter((task) => task.state === "done" && !wasDone.has(task.title)).length;
     const body = JSON.stringify(next, null, 2) + "\n";
     if (Buffer.byteLength(body) > MAX_STATE_BYTES) throw new Error("The office state is too large.");
     const temp = `${file}.${process.pid}.tmp`;
@@ -191,4 +211,57 @@ export function removeAgent(state: OfficeState, id: string): boolean {
   const before = state.agents.length;
   state.agents = state.agents.filter((a) => a.id !== slug(id));
   return state.agents.length < before;
+}
+
+/** A quest for this agent: its own first, then one nobody has taken. Quests from other agents wait for a person. */
+export function nextQuest(state: OfficeState, agentId: string, aliases: string[] = []): Quest | undefined {
+  const mine = [agentId, ...aliases];
+  const trusted = (quest: Quest): boolean => !quest.by || quest.by === "user";
+  return state.tasks.find((quest) => quest.state === "todo" && quest.agent !== undefined && mine.includes(quest.agent))
+    ?? state.tasks.find((quest) => quest.state === "todo" && quest.agent === undefined && trusted(quest));
+}
+
+/** The project's name is the map's seed, so no two projects get the same building. */
+export function projectSeed(root: string): string {
+  try {
+    const name = (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as Json)["name"];
+    if (typeof name === "string" && name) return name;
+  } catch {
+    // no package.json
+  }
+  return path.basename(path.resolve(root));
+}
+
+export async function readMap(kitDir: string): Promise<OfficeMap | undefined> {
+  try {
+    const map = JSON.parse(await readFile(path.join(kitDir, MAP_FILE), "utf8")) as OfficeMap;
+    return Array.isArray(map.rooms) ? map : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function writeMap(kitDir: string, map: OfficeMap): Promise<void> {
+  const file = path.join(kitDir, MAP_FILE);
+  const temp = `${file}.${process.pid}.tmp`;
+  await writeFile(temp, JSON.stringify(map, null, 2) + "\n");
+  await rename(temp, file);
+}
+
+/** Bring a Kit's map up to date with the project. Returns what changed, in words. */
+export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean }> {
+  const previous = options.reset ? undefined : await readMap(kitDir);
+  if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false };
+  const { map, changes } = evolveMap(previous, scanProject(root), options.seed ?? previous?.seed ?? projectSeed(root));
+  const same = previous && JSON.stringify(previous) === JSON.stringify(map);
+  if (!same) await writeMap(kitDir, map);
+  return { map, changes, wrote: !same };
+}
+
+/** Which room a file is in. The path is only matched, never stored. */
+export async function areaForFile(kitDir: string, root: string, file: string): Promise<string | undefined> {
+  const map = await readMap(kitDir);
+  if (!map) return undefined;
+  const relative = path.isAbsolute(file) ? path.relative(root, file) : file;
+  return relative.startsWith("..") ? undefined : roomForPath(map.rooms, relative);
 }

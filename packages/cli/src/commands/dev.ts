@@ -30,7 +30,8 @@ import { discover, kindOf, validateOne, type CheckIssue } from "./check.js";
 import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
 import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
 import { OFFICE_HTML, OFFICE_JS } from "../office/app.js";
-import { MAX_STATE_BYTES, findOfficeBlock, findOfficeKits, normalizeState, readOfficeState, updateOfficeState } from "../office/state.js";
+import type { OfficeMap } from "../office/mapgen.js";
+import { MAX_STATE_BYTES, STATE_FILE, MAP_FILE, evolveKitMap, findOfficeBlock, findOfficeKits, normalizeState, readMap, readOfficeState, updateOfficeState, writeMap, type OfficeState } from "../office/state.js";
 
 const DEFAULT_PORT = 4173;
 const PORT_ATTEMPTS = 20;
@@ -79,17 +80,19 @@ async function readCompanions(dir: string): Promise<Json[]> {
 
 /** office-state.json beside a Kit overrides who and what its office shows, so anything can drive it. */
 async function applyOfficeState(dir: string, pages: Json[]): Promise<void> {
-  let state: Json;
+  let state: Json = {};
   try {
     state = (await readJson(path.join(dir, "office-state.json"))) as Json;
   } catch {
-    return; // none yet, or half written: the next save reloads this
+    // none yet, or half written: the next save reloads this
   }
+  const map = await readMap(dir);
   for (const page of pages) {
     for (const block of (page["blocks"] ?? []) as { block?: string; props?: Json }[]) {
       if (block.block !== "office" && !Array.isArray(block.props?.["agents"])) continue;
       block.props = {
         ...block.props,
+        ...(map ? { cols: map.cols, rows: map.rows, rooms: map.rooms, doors: map.doors, furniture: map.furniture } : {}),
         ...(Array.isArray(state["agents"]) ? { agents: state["agents"] } : {}),
         ...(Array.isArray(state["tasks"]) ? { tasks: state["tasks"] } : {}),
       };
@@ -229,7 +232,34 @@ export interface DevServer {
   close: () => void;
 }
 
-export async function startDevServer(root: string, port: number, exactPort: boolean): Promise<DevServer> {
+/** A desktop notification. The text goes in as arguments, never as part of a script. */
+function desktopNotify(title: string, message: string): void {
+  const run = (command: string, args: string[]): void => {
+    const child = spawn(command, args, { stdio: "ignore", detached: true });
+    child.on("error", () => undefined);
+    child.unref();
+  };
+  if (process.platform === "darwin") {
+    run("osascript", ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", title, message]);
+  } else if (process.platform === "linux") {
+    run("notify-send", ["--", title, message]);
+  }
+}
+
+/** What needs a person's attention, between one state of the office and the next. */
+export function alertsBetween(before: OfficeState | undefined, after: OfficeState): { title: string; message: string }[] {
+  if (!before) return [];
+  const out: { title: string; message: string }[] = [];
+  for (const agent of after.agents) {
+    const was = before.agents.find((a) => a.id === agent.id);
+    if (was?.state === agent.state) continue;
+    if (agent.state === "blocked") out.push({ title: `${agent.name} needs you`, message: agent.task || "This agent is stuck." });
+    if (was && agent.state === "done") out.push({ title: `${agent.name} finished`, message: agent.task || "Ready for what is next." });
+  }
+  return out;
+}
+
+export async function startDevServer(root: string, port: number, exactPort: boolean, options: { notify?: boolean } = {}): Promise<DevServer> {
   const clients = new Set<ServerResponse>();
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -260,6 +290,41 @@ export async function startDevServer(root: string, port: number, exactPort: bool
       });
       return send(res, 200, "application/json", JSON.stringify(saved));
     }
+    if (url.pathname === "/api/office/layout" && req.method === "PUT") {
+      if (!isSameOrigin(req)) return send(res, 403, "text/plain", "This only accepts changes from the office page.");
+      if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return send(res, 415, "text/plain", "Send JSON.");
+      const dir = await officeKit();
+      if (!dir) return send(res, 404, "text/plain", "No such office.");
+      const body = await readBody(req, MAX_STATE_BYTES * 4);
+      if (body === undefined) return send(res, 413, "text/plain", "That is too large.");
+      let incoming: OfficeMap;
+      try {
+        incoming = JSON.parse(body) as OfficeMap;
+      } catch {
+        return send(res, 400, "text/plain", "That is not valid JSON.");
+      }
+      if (!Array.isArray(incoming.rooms) || !Array.isArray(incoming.doors) || !Array.isArray(incoming.furniture)) return send(res, 400, "text/plain", "That is not a map.");
+      const current = await readMap(dir);
+      await writeMap(dir, {
+        version: 1,
+        seed: current?.seed ?? "project",
+        evolve: incoming.evolve !== false,
+        cols: Math.min(64, Math.max(6, Math.floor(Number(incoming.cols) || 24))),
+        rows: Math.min(40, Math.max(6, Math.floor(Number(incoming.rows) || 16))),
+        rooms: incoming.rooms.slice(0, 60),
+        doors: incoming.doors.slice(0, 120),
+        furniture: incoming.furniture.slice(0, 400),
+        log: current?.log ?? [],
+      });
+      return send(res, 200, "application/json", "{}");
+    }
+    if (url.pathname === "/api/office/map" && req.method === "POST") {
+      if (!isSameOrigin(req)) return send(res, 403, "text/plain", "This only accepts changes from the office page.");
+      const dir = await officeKit();
+      if (!dir) return send(res, 404, "text/plain", "No such office.");
+      const { changes } = await evolveKitMap(dir, root, { reset: url.searchParams.get("reset") === "1" });
+      return send(res, 200, "application/json", JSON.stringify({ changes }));
+    }
     if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "text/plain", "Method not allowed");
     if (url.pathname === "/office") return send(res, 200, "text/html", OFFICE_HTML, SHELL_CSP);
     if (url.pathname === "/office.js") return send(res, 200, "text/javascript", OFFICE_JS);
@@ -281,7 +346,8 @@ export async function startDevServer(root: string, port: number, exactPort: bool
         }
       }
       const props = findOfficeBlock(dir) ?? {};
-      const scene = { cols: props["cols"], rows: props["rows"], rooms: props["rooms"], doors: props["doors"], furniture: props["furniture"] };
+      const map = await readMap(dir);
+      const scene = map ?? { cols: props["cols"], rows: props["rows"], rooms: props["rooms"], doors: props["doors"], furniture: props["furniture"] };
       const vars = themeJsonToVariables(theme as never);
       return send(res, 200, "application/json", JSON.stringify({ name: kit["name"], scene, vars, ...(await readOfficeState(dir)) }));
     }
@@ -346,6 +412,26 @@ export async function startDevServer(root: string, port: number, exactPort: bool
     }
   }
 
+  // The map follows the project, and alerts follow the agents.
+  const lastStates = new Map<string, OfficeState>();
+  const syncOffices = async (evolve: boolean): Promise<void> => {
+    for (const dir of await findOfficeKits(root)) {
+      if (evolve) {
+        const { changes } = await evolveKitMap(dir, root);
+        for (const change of changes) console.log(`${chalk.green("Map")}  ${change}`);
+      }
+      const state = await readOfficeState(dir);
+      for (const alert of alertsBetween(lastStates.get(dir), state)) {
+        console.log(`${chalk.yellow("Alert")}  ${alert.title}: ${alert.message}\u0007`);
+        if (options.notify !== false) desktopNotify(alert.title, alert.message);
+      }
+      lastStates.set(dir, state);
+    }
+  };
+  await syncOffices(true).catch(() => undefined);
+
+  let projectTimer: NodeJS.Timeout | undefined;
+  let stateTimer: NodeJS.Timeout | undefined;
   let timer: NodeJS.Timeout | undefined;
   const notify = (): void => {
     clearTimeout(timer);
@@ -355,6 +441,15 @@ export async function startDevServer(root: string, port: number, exactPort: bool
   };
   const watcher: FSWatcher = watch(root, { recursive: true }, (_event, name) => {
     if (name && (String(name).split(path.sep).some((part) => IGNORED.has(part)) || IGNORED_FILES.test(String(name)))) return;
+    const base = name ? path.basename(String(name)) : "";
+    if (base === STATE_FILE) {
+      clearTimeout(stateTimer);
+      stateTimer = setTimeout(() => { syncOffices(false).catch(() => undefined); }, 60);
+    } else if (base !== MAP_FILE) {
+      // Wait for a burst of changes, like a branch switch, to settle.
+      clearTimeout(projectTimer);
+      projectTimer = setTimeout(() => { syncOffices(true).catch(() => undefined); }, 1200);
+    }
     notify();
   });
   watcher.on("error", (error) => console.error(chalk.yellow(`Could not watch for changes: ${error.message}`)));
@@ -367,6 +462,8 @@ export async function startDevServer(root: string, port: number, exactPort: bool
     port: (server.address() as AddressInfo).port,
     close: () => {
       clearTimeout(timer);
+      clearTimeout(projectTimer);
+      clearTimeout(stateTimer);
       clearInterval(heartbeat);
       watcher.close();
       for (const client of clients) client.end();
@@ -388,6 +485,7 @@ function openBrowser(url: string): void {
 interface DevOptions {
   port?: string;
   open: boolean;
+  notify: boolean;
 }
 
 export function registerDevCommand(program: Command): void {
@@ -396,6 +494,7 @@ export function registerDevCommand(program: Command): void {
     .description("Preview your Blocks, Kits and Circuits in the browser, reloading on save.")
     .option("-p, --port <port>", `Port to use (default ${DEFAULT_PORT}, or the next free one)`)
     .option("--no-open", "Don't open a browser")
+    .option("--no-notify", "No desktop notifications when an agent is stuck or finishes")
     .action(async (target: string | undefined, options: DevOptions) => {
       const root = path.resolve(process.cwd(), target ?? ".");
       const port = options.port === undefined ? DEFAULT_PORT : Number(options.port);
@@ -422,7 +521,7 @@ export function registerDevCommand(program: Command): void {
 
       let dev: DevServer;
       try {
-        dev = await startDevServer(root, port, options.port !== undefined);
+        dev = await startDevServer(root, port, options.port !== undefined, { notify: options.notify });
       } catch (error) {
         const inUse = (error as NodeJS.ErrnoException).code === "EADDRINUSE";
         console.error(chalk.red(inUse ? `Port ${port} is already in use. Try another with --port.` : String(error)));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentAt, applyUpdate, createWorld, DEFAULT_LAYOUT, findPath, FURNITURE, goalFor, isSeated, isWalkable, step, MAX_COLS } from "./world.js";
+import { agentAt, applyLayout, applyUpdate, createWorld, DEFAULT_LAYOUT, findPath, FURNITURE, goalFor, isSeated, isWalkable, step, MAX_COLS } from "./world.js";
 import type { OfficeScene } from "./types.js";
 
 const scene: OfficeScene = {
@@ -165,6 +165,37 @@ describe("applyUpdate", () => {
     for (const agent of world.agents) expect(isWalkable(world, agent.x, agent.y)).toBe(true);
   });
 
+  it("sends an agent to the room for the folder it is working in", () => {
+    const layout: OfficeScene = {
+      cols: 24, rows: 12,
+      rooms: [{ id: "api", name: "API", x: 1, y: 2, w: 10, h: 9, paths: ["src/api/"] }, { id: "docs", name: "Docs", x: 12, y: 2, w: 10, h: 9, paths: ["docs/"] }],
+      doors: [{ x: 11, y: 6 }],
+      furniture: [{ type: "desk", x: 2, y: 3 }, { type: "desk", x: 14, y: 3 }],
+    };
+    const world = createWorld({ ...layout, agents: [{ id: "ada", state: "working", area: "api" }] });
+    expect(world.rooms[0]!.paths).toEqual(["src/api/"]);
+    const ada = world.agents[0]!;
+    expect(ada.seat).toEqual({ x: 3, y: 5 });
+    applyUpdate(world, { agents: [{ id: "ada", state: "working", area: "docs" }] });
+    expect(ada.seat).toEqual({ x: 15, y: 5 });
+    run(world, 30);
+    expect(isSeated(ada)).toBe(true);
+    // A second agent in docs finds the desk taken, and stands in the room anyway.
+    applyUpdate(world, { agents: [{ id: "ada", state: "working", area: "docs" }, { id: "bob", state: "working", area: "docs" }] });
+    run(world, 30);
+    const bob = world.agents[1]!;
+    expect(bob.seat).toBeUndefined();
+    expect(bob.x).toBeGreaterThanOrEqual(12);
+  });
+
+  it("celebrates once when an agent finishes", () => {
+    const world = createWorld({ agents: [{ id: "ada", state: "working" }] });
+    applyUpdate(world, { agents: [{ id: "ada", state: "done" }] });
+    expect(world.agents[0]!.party).toBeGreaterThan(0);
+    run(world, 40);
+    expect(world.agents[0]!.party).toBe(0);
+  });
+
   it("adds, removes and updates tasks", () => {
     const world = createWorld(scene);
     applyUpdate(world, { agents: [{ id: "new-one", state: "working" }], tasks: [{ title: "Only", state: "done" }] });
@@ -208,5 +239,31 @@ describe("agentAt", () => {
     const ada = world.agents[0]!;
     expect(agentAt(world, ada.x + 0.5, ada.y - 0.5)?.id).toBe("ada");
     expect(agentAt(world, 0, 0)).toBeUndefined();
+  });
+});
+
+describe("changing the building", () => {
+  it("moves anyone left inside a wall, and keeps everyone able to walk", () => {
+    const world = createWorld(scene);
+    applyLayout(world, { cols: 12, rows: 10, rooms: [{ id: "only", x: 1, y: 2, w: 10, h: 7 }], furniture: [{ type: "desk", x: 3, y: 3 }] });
+    expect(world.cols).toBe(12);
+    for (const agent of world.agents) {
+      if (agent.state !== "away") expect(isWalkable(world, Math.round(agent.x), Math.round(agent.y))).toBe(true);
+    }
+    run(world, 20);
+    for (const agent of world.agents) {
+      if (agent.state !== "away") expect(isWalkable(world, Math.round(agent.x), Math.round(agent.y))).toBe(true);
+    }
+    expect(world.seats).toEqual([{ x: 4, y: 5 }]);
+    expect(world.agents.filter((a) => a.seat).length).toBe(1);
+  });
+
+  it("knows every furniture type, with a sane footprint", () => {
+    for (const [type, spec] of Object.entries(FURNITURE)) {
+      expect(spec.w, type).toBeGreaterThan(0);
+      expect(spec.h, type).toBeGreaterThan(0);
+    }
+    const world = createWorld({ cols: 40, rows: 20, rooms: [{ x: 1, y: 2, w: 38, h: 17 }], furniture: Object.keys(FURNITURE).map((type, i) => ({ type, x: 1 + (i % 9) * 4, y: 3 + Math.floor(i / 9) * 4 })) as OfficeScene["furniture"] });
+    expect(world.furniture.length).toBe(Object.keys(FURNITURE).length);
   });
 });

@@ -15,7 +15,7 @@ import type { OfficeScene } from "./types.js";
 export { createOffice } from "./office.js";
 export type { OfficeHandle, OfficeOptions } from "./office.js";
 export * from "./types.js";
-export { agentAt, applyUpdate, createWorld, findPath, step } from "./world.js";
+export { FURNITURE, agentAt, applyLayout, applyUpdate, createWorld, findPath, step } from "./world.js";
 export type { Agent, World } from "./world.js";
 
 export interface MountedBlock {
