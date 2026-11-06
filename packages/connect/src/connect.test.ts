@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HOOK_FILE, SERVER_NAME, codexCommand, connectClient, disconnectClient, manualSettings } from "./index.js";
+import { HOOK_FILE, SERVER_NAME, codexCommand, connectClient, disconnectClient, hermesSettings, manualSettings } from "./index.js";
 
 let root: string;
 beforeEach(async () => { root = await mkdtemp(path.join(tmpdir(), "blkc-connect-")); });
@@ -18,6 +18,16 @@ describe("connectClient", () => {
     await connectClient("vscode", options());
     expect((await json(".cursor/mcp.json"))["mcpServers"][SERVER_NAME].args).toContain("${workspaceFolder}/kits/office");
     expect((await json(".vscode/mcp.json"))["servers"][SERVER_NAME].type).toBe("stdio");
+  });
+
+  it("writes OpenCode's format, and keeps its other servers", async () => {
+    await writeFile(path.join(root, "opencode.json"), JSON.stringify({ $schema: "x", mcp: { supabase: { type: "remote", url: "u" } } }));
+    await connectClient("opencode", options());
+    const config = await json("opencode.json");
+    expect(config["mcp"].supabase).toEqual({ type: "remote", url: "u" });
+    expect(config["mcp"][SERVER_NAME]).toEqual({ type: "local", command: ["npx", "-y", "@blkc-code/cli@latest", "office", "mcp", "--kit", "kits/office"], enabled: true });
+    expect(await disconnectClient("opencode", root)).toBe(true);
+    expect(Object.keys((await json("opencode.json"))["mcp"])).toEqual(["supabase"]);
   });
 
   it("keeps the other servers already there", async () => {
@@ -82,5 +92,9 @@ describe("agents whose settings live elsewhere", () => {
   it("gives the settings to paste, or the command to run", () => {
     expect(manualSettings("/k")[SERVER_NAME]).toMatchObject({ command: "npx" });
     expect(codexCommand("/k")).toContain("codex mcp add blkc-office -- npx");
+    const yaml = hermesSettings("/repo/kits/office", "/repo");
+    expect(yaml).toContain('command: "npx"');
+    expect(yaml).toContain('cwd: "/repo"');
+    expect(yaml).toContain("/repo/kits/office");
   });
 });

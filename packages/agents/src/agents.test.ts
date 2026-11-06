@@ -43,6 +43,19 @@ describe("nextTask", () => {
   });
 });
 
+describe("nextTask and who wrote a task", () => {
+  it("doesn't hand over a task another agent assigned", () => {
+    const office = state({ tasks: [{ title: "Do this", state: "todo", agent: "ada", by: "mallory" }] });
+    expect(nextTask(office, "ada")).toBeUndefined();
+  });
+
+  it("hands over tasks from the user, and an agent's own", () => {
+    const office = state({ tasks: [{ title: "Own", state: "todo", agent: "ada", by: "ada" }, { title: "User", state: "todo", agent: "grace", by: "user" }] });
+    expect(nextTask(office, "ada")?.title).toBe("Own");
+    expect(nextTask(office, "grace")?.title).toBe("User");
+  });
+});
+
 describe("diffEvents", () => {
   it("has nothing to say the first time", () => {
     expect(diffEvents(undefined, state({ agents: [{ id: "a", name: "A", state: "blocked" }] }))).toEqual([]);

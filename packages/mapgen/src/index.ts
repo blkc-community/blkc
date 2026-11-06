@@ -4,10 +4,11 @@
  * exist stay where they are, new folders add rooms, bigger folders get bigger rooms, and a
  * room someone has edited by hand is never touched again.
  *
- * Only folder names and file counts are read here, never file contents.
+ * Folder names, file counts and project manifests (package.json, pnpm-workspace.yaml) are read
+ * here, never source code.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 export interface MapRoom {
@@ -38,15 +39,36 @@ export interface OfficeMap {
   doors: MapDoor[];
   furniture: MapItem[];
   log: { at: string; text: string }[];
+  /** Which rooms depend on which, and whether a door joins them. */
+  links?: MapLink[];
 }
+export interface MapLink { from: string; to: string; door: boolean }
 
-export interface ProjectArea { id: string; name: string; path: string; files: number }
-export interface ProjectScan { areas: ProjectArea[]; rootFiles: number }
+export interface ProjectArea {
+  id: string;
+  name: string;
+  path: string;
+  files: number;
+  /** How many other areas depend on this one. */
+  dependents?: number;
+}
+export interface ProjectScan {
+  areas: ProjectArea[];
+  rootFiles: number;
+  /** `from` depends on `to`. */
+  links?: { from: string; to: string }[];
+  /** Folders that didn't make the map. */
+  omitted?: number;
+}
 
 const MAX_COLS = 64;
 const MAX_ROWS = 40;
-const MAX_AREAS = 14;
-const MAX_ENTRIES = 60000;
+const MAX_AREAS = 20;
+/** Past this many rooms, they stay small so that more of the project fits. */
+const COMPACT_ABOVE = 14;
+const MAX_ENTRIES = 200000;
+/** One huge folder can't use up the scan and leave the rest uncounted. */
+const MAX_ENTRIES_PER_AREA = 20000;
 const MAX_DEPTH = 8;
 const IGNORE = new Set(["node_modules", ".git", "dist", "build", "out", "target", "coverage", ".next", ".turbo", ".cache", "vendor", "venv", "__pycache__", ".venv", ".idea", ".vscode", ".claude", ".blkc", ".gemini", ".cursor"]);
 const CONTAINERS = new Set(["src", "packages", "apps", "services", "libs", "lib", "modules", "crates", "cmd", "internal", "app"]);
@@ -73,17 +95,79 @@ function rng(seed: string): () => number {
   };
 }
 
-/** Folder names and file counts. A .gitignore's plain folder names are skipped too. */
-export function scanProject(root: string): ProjectScan {
-  const ignored = new Set(IGNORE);
+/** The plain folder names in a .gitignore. Patterns with wildcards aren't followed. */
+export function gitignoredNames(root: string): Set<string> {
+  const names = new Set<string>();
   try {
     for (const line of readFileSync(path.join(root, ".gitignore"), "utf8").split("\n")) {
       const name = line.trim().replace(/^\//, "").replace(/\/$/, "");
-      if (name && !/[*!#/\s]/.test(name)) ignored.add(name);
+      if (name && !/[*!#/\s]/.test(name)) names.add(name);
     }
   } catch {
     // no .gitignore
   }
+  return names;
+}
+
+/** A folder with its own .git is another project, even if it sits inside this one. */
+export const isOwnRepo = (dir: string): boolean => existsSync(path.join(dir, ".git"));
+
+type Json = Record<string, unknown>;
+
+const readPackage = (dir: string): Json | undefined => {
+  try {
+    return JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as Json;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Top-level folders a workspace config says hold packages, such as tools from "tools/*". */
+function workspaceFolders(root: string): string[] {
+  const globs: string[] = [];
+  const workspaces = readPackage(root)?.["workspaces"];
+  const listed = Array.isArray(workspaces) ? workspaces : (workspaces as Json | undefined)?.["packages"];
+  if (Array.isArray(listed)) globs.push(...listed.filter((item): item is string => typeof item === "string"));
+  try {
+    for (const line of readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8").split("\n")) {
+      const match = /^\s*-\s*['"]?([^'"#\s]+)/.exec(line);
+      if (match?.[1]) globs.push(match[1]);
+    }
+  } catch {
+    // not pnpm
+  }
+  return globs.flatMap((glob) => /^[^/!*]+\/\*{1,2}$/.test(glob) ? [glob.split("/")[0] as string] : []);
+}
+
+/** Who depends on whom, from each area's package.json. */
+function findLinks(root: string, areas: ProjectArea[]): { from: string; to: string }[] {
+  const owners = new Map<string, string>();
+  const manifests = new Map<string, Json>();
+  for (const area of areas) {
+    const manifest = readPackage(path.join(root, area.path));
+    if (!manifest) continue;
+    manifests.set(area.id, manifest);
+    if (typeof manifest["name"] === "string") owners.set(manifest["name"], area.id);
+  }
+  const links: { from: string; to: string }[] = [];
+  for (const [from, manifest] of manifests) {
+    const seen = new Set<string>();
+    for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
+      for (const name of Object.keys((manifest[field] ?? {}) as Json)) {
+        const to = owners.get(name);
+        if (to && to !== from && !seen.has(to)) {
+          seen.add(to);
+          links.push({ from, to });
+        }
+      }
+    }
+  }
+  return links;
+}
+
+/** Folder names, file counts and how the folders depend on each other. */
+export function scanProject(root: string): ProjectScan {
+  const ignored = new Set([...IGNORE, ...gitignoredNames(root)]);
 
   let budget = MAX_ENTRIES;
   const countFiles = (dir: string, depth: number): number => {
@@ -98,7 +182,8 @@ export function scanProject(root: string): ProjectScan {
     for (const entry of entries) {
       if (--budget <= 0) break;
       if (entry.isDirectory()) {
-        if (!ignored.has(entry.name)) files += countFiles(path.join(dir, entry.name), depth + 1);
+        const child = path.join(dir, entry.name);
+        if (!ignored.has(entry.name) && !isOwnRepo(child)) files += countFiles(child, depth + 1);
       } else if (entry.isFile()) {
         files += 1;
       }
@@ -108,7 +193,7 @@ export function scanProject(root: string): ProjectScan {
   const subdirs = (dir: string): string[] => {
     try {
       return readdirSync(dir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && !ignored.has(entry.name) && (!entry.name.startsWith(".") || entry.name === ".github"))
+        .filter((entry) => entry.isDirectory() && !ignored.has(entry.name) && (!entry.name.startsWith(".") || entry.name === ".github") && !isOwnRepo(path.join(dir, entry.name)))
         .map((entry) => entry.name)
         .sort();
     } catch {
@@ -116,14 +201,21 @@ export function scanProject(root: string): ProjectScan {
     }
   };
 
+  const containers = new Set([...CONTAINERS, ...workspaceFolders(root)]);
   const areas: ProjectArea[] = [];
+  let remaining = MAX_ENTRIES;
   const add = (rel: string): void => {
+    budget = Math.min(MAX_ENTRIES_PER_AREA, remaining);
+    const before = budget;
     const files = countFiles(path.join(root, rel), 0);
+    remaining -= before - Math.max(budget, 0);
     if (files > 0) areas.push({ id: slug(rel), name: titled(path.basename(rel)), path: `${rel}/`, files });
   };
   for (const name of subdirs(root)) {
-    const children = CONTAINERS.has(name) ? subdirs(path.join(root, name)) : [];
-    if (children.length >= 2) for (const child of children) add(`${name}/${child}`);
+    const children = containers.has(name) ? subdirs(path.join(root, name)) : [];
+    // One package in packages/ is still a package, but one folder in src/ is just a folder.
+    const open = children.length >= 2 || children.some((child) => readPackage(path.join(root, name, child)));
+    if (open) for (const child of children) add(`${name}/${child}`);
     else add(name);
   }
   let rootFiles = 0;
@@ -132,8 +224,25 @@ export function scanProject(root: string): ProjectScan {
   } catch {
     // leave it at 0
   }
-  areas.sort((a, b) => b.files - a.files || a.id.localeCompare(b.id));
-  return { areas: areas.slice(0, MAX_AREAS), rootFiles };
+
+  // Code that's linked to other code comes first, and a package many use before a big folder few do.
+  const links = findLinks(root, areas);
+  const linked = new Set(links.flatMap((link) => [link.from, link.to]));
+  for (const area of areas) {
+    const dependents = links.filter((link) => link.to === area.id).length;
+    if (dependents > 0) area.dependents = dependents;
+  }
+  const score = (area: ProjectArea): number => Math.log2(area.files + 1) + (area.dependents ?? 0) * 2 + (linked.has(area.id) ? 20 : 0);
+  areas.sort((a, b) => score(b) - score(a) || a.id.localeCompare(b.id));
+
+  const kept = areas.slice(0, MAX_AREAS);
+  const keptIds = new Set(kept.map((area) => area.id));
+  return {
+    areas: kept,
+    rootFiles,
+    ...(links.length > 0 ? { links: links.filter((link) => keptIds.has(link.from) && keptIds.has(link.to)) } : {}),
+    ...(areas.length > MAX_AREAS ? { omitted: areas.length - MAX_AREAS } : {}),
+  };
 }
 
 // --- What a folder looks like ---------------------------------------------------------------------------
@@ -152,8 +261,10 @@ const THEMES: { match: RegExp; theme: Theme }[] = [
 ];
 const FALLBACK_FLOORS = ["wood", "carpet", "tile", "stone", "concrete"];
 
-function themeFor(id: string, random: () => number): Theme {
-  const found = THEMES.find(({ match }) => match.test(id));
+/** The look comes from a folder's own name, so everything in apps/ doesn't look like a front end. */
+function themeFor(folder: string, random: () => number): Theme {
+  const own = folder.replace(/\/$/, "").split("/").pop() ?? folder;
+  const found = THEMES.find(({ match }) => match.test(own));
   if (found) return found.theme;
   return { floor: FALLBACK_FLOORS[Math.floor(random() * FALLBACK_FLOORS.length)] as string, items: ["plant", "shelf", "lamp"], decor: ["poster"] };
 }
@@ -166,12 +277,12 @@ const FOOTPRINT: Record<string, { w: number; h: number; spot?: [number, number];
 };
 
 /** Room size follows the folder: slow growth, so a huge folder doesn't swallow the map. */
-function targetSize(id: string, files: number, seed: string): { w: number; h: number } {
+function targetSize(id: string, files: number, seed: string, compact = false): { w: number; h: number } {
   const scale = Math.log2(Math.max(files, 1) + 1);
   const random = rng(`${seed}:size:${id}`);
   return {
-    w: Math.min(14, Math.max(7, Math.round(6 + scale * 0.9 + random() * 2))),
-    h: Math.min(9, Math.max(5, Math.round(4 + scale * 0.55 + random() * 2))),
+    w: Math.min(compact ? 10 : 14, Math.max(7, Math.round(6 + scale * 0.9 + random() * 2))),
+    h: Math.min(compact ? 6 : 9, Math.max(5, Math.round(4 + scale * 0.55 + random() * 2))),
   };
 }
 
@@ -209,6 +320,7 @@ function attach(
   rooms: MapRoom[],
   prefer: MapRoom[],
   random: () => number,
+  pull = 8,
 ): { box: Box; door: MapDoor; host: MapRoom } | undefined {
   const center = (() => {
     const b = bounds(rooms);
@@ -217,7 +329,7 @@ function attach(
   let best: { box: Box; door: MapDoor; host: MapRoom; score: number } | undefined;
   // A door can't be cut into a room edited by hand: its furniture may be in the way.
   for (const host of rooms.filter((room) => !room.locked)) {
-    const near = prefer.includes(host) ? -8 : 0;
+    const near = prefer.includes(host) ? -pull : 0;
     const consider = (box: Box, door: MapDoor): void => {
       if (rooms.some((room) => clashes(box, room))) return;
       if (!fits([...rooms, box])) return;
@@ -369,7 +481,7 @@ function furnish(room: MapRoom, doors: MapDoor[], seed: string): MapItem[] {
     return items;
   }
 
-  const theme = themeFor(room.id, random);
+  const theme = themeFor(room.paths[0] ?? room.id, random);
   let placed = 0;
   const wanted = deskCount(room.files ?? 1);
   const stepX = 4 + (random() < 0.3 ? 1 : 0);
@@ -437,7 +549,7 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
       map.rooms = others;
       map.doors = keptDoors;
       map.furniture = map.furniture.filter((item) => item.room !== room.id);
-      changes.push(`${room.name} closed: its folder has gone`);
+      changes.push(`${room.name} closed: its folder has gone, or is no longer one of the main ones`);
     } else {
       changes.push(`${room.name} is now empty: its folder has gone, and it stays as a way through`);
       room.role = "vacant";
@@ -449,14 +561,18 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
 
   // Folders that exist: update those we know, and add new ones. Biggest first, so if the map
   // ever runs out of space, it's the smallest folders that share the lobby.
-  const ordered = scan.areas.slice().sort((a, b) => b.files - a.files || hashText(`${map.seed}:${a.id}`) - hashText(`${map.seed}:${b.id}`));
+  const compact = scan.areas.length > COMPACT_ABOVE;
+  const links = scan.links ?? [];
+  const isLinked = (area: ProjectArea): number => links.some((link) => link.from === area.id || link.to === area.id) ? 1 : 0;
+  // Linked rooms go first, while there's still space beside what they depend on.
+  const ordered = scan.areas.slice().sort((a, b) => isLinked(b) - isLinked(a) || (b.dependents ?? 0) - (a.dependents ?? 0) || b.files - a.files || hashText(`${map.seed}:${a.id}`) - hashText(`${map.seed}:${b.id}`));
   for (const area of ordered) {
     const room = map.rooms.find((candidate) => candidate.id === area.id);
     if (room) {
       if (room.locked) continue;
       const beforeDesks = deskCount(room.files ?? 1);
       room.files = area.files;
-      const target = targetSize(room.id, area.files, map.seed);
+      const target = targetSize(room.id, area.files, map.seed, compact);
       const others = map.rooms.filter((candidate) => candidate !== room);
       const doorStaysOutside = (box: Box): boolean => map.doors.every((door) => !(door.x >= box.x && door.x < box.x + box.w && door.y >= box.y && door.y < box.y + box.h));
       let grew = false;
@@ -478,12 +594,17 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     }
     const parent = area.path.split("/").slice(0, -2).join("/");
     const family = map.rooms.filter((candidate) => candidate.paths.some((p) => parent && p.startsWith(`${parent}/`)));
-    const wantedSize = targetSize(area.id, area.files, map.seed);
-    const spot = attach(wantedSize, map.rooms, family, rng(`${map.seed}:place:${area.id}`))
-      ?? attach({ w: 7, h: 5 }, map.rooms, family, rng(`${map.seed}:place:${area.id}`));
+    const wantedSize = targetSize(area.id, area.files, map.seed, compact);
+    // A room goes beside what it depends on, if there's space, so a door there means something.
+    const partners = links.flatMap((link) => link.from === area.id ? [link.to] : link.to === area.id ? [link.from] : []);
+    const related = map.rooms.filter((candidate) => partners.includes(candidate.id));
+    const prefer = related.length > 0 ? related : family;
+    const pull = related.length > 0 ? 40 : 8;
+    const spot = attach(wantedSize, map.rooms, prefer, rng(`${map.seed}:place:${area.id}`), pull)
+      ?? attach({ w: 7, h: 5 }, map.rooms, prefer, rng(`${map.seed}:place:${area.id}`), pull);
     if (!spot) continue; // the map is full; this folder's agents use the lobby
     const random = rng(`${map.seed}:theme:${area.id}`);
-    map.rooms.push({ id: area.id, name: area.name, floor: themeFor(area.id, random).floor, paths: [area.path], files: area.files, ...spot.box });
+    map.rooms.push({ id: area.id, name: area.name, floor: themeFor(area.path, random).floor, paths: [area.path], files: area.files, ...spot.box });
     map.doors.push(spot.door);
     touched.add(area.id);
     touched.add(spot.host.id);
@@ -497,6 +618,15 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     map.furniture = map.furniture.filter((item) => item.room !== id);
     map.furniture.push(...furnish(room, map.doors, map.seed));
   }
+
+  const onMap = (id: string): MapRoom | undefined => map.rooms.find((room) => room.id === id);
+  const mapped = links.flatMap((link) => {
+    const from = onMap(link.from);
+    const to = onMap(link.to);
+    return from && to ? [{ ...link, door: map.doors.some((door) => touches(from, door) && touches(to, door)) }] : [];
+  });
+  if (mapped.length > 0) map.links = mapped;
+  else delete map.links;
 
   normalize(map);
   if (changes.length > 0) map.log = [...map.log, ...changes.map((text) => ({ at: now, text }))].slice(-30);

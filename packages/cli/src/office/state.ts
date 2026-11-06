@@ -3,7 +3,7 @@
  * The state itself is @blkc-code/agents, and the map is @blkc-code/mapgen.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createFileStore, type AgentStore, type AgentsState } from "@blkc-code/agents";
@@ -57,14 +57,29 @@ export async function findOfficeKits(root: string): Promise<string[]> {
     .filter((dir) => findOfficeBlock(dir) !== undefined);
 }
 
-/** The Kit an office command means: the one named, or the only one here. */
-export async function resolveKit(kit: string | undefined, cwd: string): Promise<string> {
-  if (kit) {
-    const dir = path.resolve(cwd, kit);
-    if (!findOfficeBlock(dir)) throw new Error(`${kit} is not a Kit with an office Block.`);
-    return dir;
+/** The top of the repo holding `start`, or `fallback` when it isn't in one. */
+export function projectRoot(start: string, fallback = start): string {
+  let dir = path.resolve(start);
+  for (;;) {
+    if (existsSync(path.join(dir, ".git"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return path.resolve(fallback);
+    dir = parent;
   }
-  const kits = await findOfficeKits(cwd);
+}
+
+/** The Kit an office command means: the one named, or the only one here. An agent can start anywhere in the repo. */
+export async function resolveKit(kit: string | undefined, cwd: string): Promise<string> {
+  const top = projectRoot(cwd);
+  if (kit) {
+    for (const base of [cwd, top]) {
+      const dir = path.resolve(base, kit);
+      if (findOfficeBlock(dir)) return dir;
+    }
+    throw new Error(`${kit} is not a Kit with an office Block.`);
+  }
+  let kits = await findOfficeKits(cwd);
+  if (kits.length === 0 && top !== path.resolve(cwd)) kits = await findOfficeKits(top);
   if (kits.length === 0) throw new Error("There is no Kit with an office here. Create one: blkc new kit pixel-office");
   if (kits.length > 1) {
     throw new Error(`More than one Kit has an office. Pick one with --kit: ${kits.map((k) => path.relative(cwd, k)).join(", ")}`);
@@ -107,19 +122,22 @@ export async function writeMap(kitDir: string, map: OfficeMap): Promise<void> {
 }
 
 /** Bring a Kit's map up to date with the project. Returns what changed, in words. */
-export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean }> {
+export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean; omitted: number }> {
   const previous = options.reset ? undefined : await readMap(kitDir);
-  if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false };
-  const { map, changes } = evolveMap(previous, scanProject(root), options.seed ?? previous?.seed ?? projectSeed(root));
+  if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false, omitted: 0 };
+  const scan = scanProject(root);
+  const { map, changes } = evolveMap(previous, scan, options.seed ?? previous?.seed ?? projectSeed(root));
   const same = previous && JSON.stringify(previous) === JSON.stringify(map);
   if (!same) await writeMap(kitDir, map);
-  return { map, changes, wrote: !same };
+  return { map, changes, wrote: !same, omitted: scan.omitted ?? 0 };
 }
 
-/** Which room a file is in. The path is only matched, never stored. */
+/** Which room a file is in, given as a path from where the agent is or from the top of the repo. The path is only matched, never stored. */
 export async function areaForFile(kitDir: string, root: string, file: string): Promise<string | undefined> {
   const map = await readMap(kitDir);
   if (!map) return undefined;
-  const relative = path.isAbsolute(file) ? path.relative(root, file) : file;
+  const fromHere = path.resolve(file);
+  const absolute = existsSync(fromHere) || !existsSync(path.resolve(root, file)) ? fromHere : path.resolve(root, file);
+  const relative = path.relative(root, absolute);
   return relative.startsWith("..") ? undefined : roomForPath(map.rooms, relative);
 }
