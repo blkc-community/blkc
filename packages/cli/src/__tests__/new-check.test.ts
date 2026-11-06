@@ -188,6 +188,33 @@ describe("blkc check", () => {
     expect(r.code, r.out).toBe(0);
   });
 
+  it("skips JSON Schema files and build output when scanning a folder", () => {
+    blkc("new", "kit", "demo");
+    const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
+    for (const name of ["block", "kit", "circuit", "theme"]) put(`packages/core/schemas/v2/${name}.json`, schema);
+    put("dist/kit.json", { not: "a manifest" });
+    put("coverage/block.json", { not: "a manifest" });
+    const r = blkc("check");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).not.toContain("schemas");
+    expect(r.out).not.toContain("dist");
+  });
+
+  it("still checks a JSON Schema file when you name it, and a manifest with its own $schema", () => {
+    put("schema/block.json", { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" });
+    expect(blkc("check", "schema/block.json").code).toBe(1);
+    blkc("new", "kit", "demo");
+    const scanned = blkc("check", "--json");
+    expect(JSON.parse(scanned.out).files).toBe(3);
+  });
+
+  it("still reports a manifest that does not parse", () => {
+    put("kits/broken/kit.json", "{ not json");
+    const r = blkc("check");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("BLKC-E004");
+  });
+
   it("--json is parseable and carries the issues", () => {
     put("blocks/demo/block.json", { ...uiBlock, id: "BAD ID" });
     const r = spawnSync(process.execPath, [CLI, "check", "--json"], { cwd: dir, encoding: "utf8" });
