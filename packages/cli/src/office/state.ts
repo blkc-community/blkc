@@ -170,6 +170,7 @@ export async function evolveKitMap(kitDir: string, root: string, options: { rese
   }
   const config = readWorldConfig(kitDir);
   const scan = scanProject(root, { ...config, ignore: [...(config.ignore ?? []), ...ownKit(kitDir, root)] });
+  scan.areas = scan.areas.filter((area) => !previous?.removed?.includes(area.id));
   const { map, changes } = evolveMap(previous, scan, options.seed ?? previous?.seed ?? projectSeed(root));
   const same = previous && JSON.stringify(previous) === JSON.stringify(map);
   if (!same) await writeMap(kitDir, map);

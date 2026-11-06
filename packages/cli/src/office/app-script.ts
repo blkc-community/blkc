@@ -252,6 +252,11 @@ function renderAlerts(box) {
 const build = { tool: "select", type: "desk", room: undefined, ghost: undefined, drag: undefined, moving: undefined, undo: [] };
 const confirmReset = { armed: false };
 
+const showPathsButton = () => {
+  const hasRoads = (layout.rooms || []).some((room) => room.role === "hall");
+  $("paths").hidden = !hasRoads;
+  $("paths").textContent = ($("paths").getAttribute("aria-pressed") === "true" ? "Hide" : "Show") + " paths";
+};
 const showLinkCount = () => {
   const count = (layout.links || []).length;
   $("links").hidden = count === 0;
@@ -377,7 +382,11 @@ function buildUp(event) {
   if (build.tool === "erase") {
     const found = itemAt(x, y);
     const door = layout.doors.find((d) => d.x === x && d.y === y);
-    if (!found && !door) return;
+    if (!found && !door) {
+      const picked = roomAt(x, y);
+      if (picked) { build.room = picked.id; render(true); }
+      return;
+    }
     remember();
     if (found) { lockAt(found.x, found.y); layout.furniture = layout.furniture.filter((it) => it !== found); }
     else layout.doors = layout.doors.filter((d) => d !== door);
@@ -385,7 +394,8 @@ function buildUp(event) {
     return;
   }
   if (build.tool === "door") {
-    if (roomAt(x, y)) return;
+    const picked = roomAt(x, y);
+    if (picked) { build.room = picked.id; render(true); return; }
     const existing = layout.doors.find((d) => d.x === x && d.y === y);
     const sides = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].filter(([a, b]) => roomAt(a, b));
     if (!existing && sides.length < 2) { $("error").textContent = "A door goes in a wall between two rooms."; return; }
@@ -433,6 +443,18 @@ function drawOverlay(c) {
   c.restore();
 }
 
+function removeRoom(room) {
+  remember();
+  // Its folder still exists, so remember, or the next update would bring it back.
+  if (room.paths && room.paths[0] && !room.locked) layout.removed = [...(layout.removed || []), room.id];
+  const touching = (d, r) => ((d.x === r.x - 1 || d.x === r.x + r.w) && d.y >= r.y && d.y < r.y + r.h) || ((d.y === r.y - 1 || d.y === r.y + r.h) && d.x >= r.x && d.x < r.x + r.w);
+  layout.doors = layout.doors.filter((d) => !touching(d, room));
+  layout.furniture = layout.furniture.filter((it) => !(inRoom(room, it.x, it.y) || it.room === room.id));
+  layout.rooms = layout.rooms.filter((r) => r !== room);
+  build.room = undefined;
+  commit();
+}
+
 function renderBuild(box) {
   const tools = [["select", "Select / move"], ["place", "Furniture"], ["room", "Draw room"], ["door", "Door"], ["erase", "Erase"]];
   box.append(make("div", { className: "row" }, ...tools.map(([id, text]) => {
@@ -462,11 +484,17 @@ function renderBuild(box) {
     box.append(make("p", { className: "muted", textContent: "Click the map to place it. Finish quests to level up and unlock more." }));
   }
   if (build.tool === "room") box.append(make("p", { className: "muted", textContent: "Drag on the map to draw a room, one tile of wall away from the others. Then add a door." }));
-  if (build.tool === "door") box.append(make("p", { className: "muted", textContent: "Click a wall between two rooms to add or remove a door." }));
-  if (build.tool === "erase") box.append(make("p", { className: "muted", textContent: "Click furniture or a door to remove it." }));
+  if (build.tool === "door") box.append(make("p", { className: "muted", textContent: "Click a wall between two rooms to add or remove a door. Click a floor to pick that room." }));
+  if (build.tool === "erase") box.append(make("p", { className: "muted", textContent: "Click furniture or a door to remove it. Click a room's floor to pick it, then remove it below." }));
 
   const room = layout.rooms.find((r) => r.id === build.room);
-  if (room && build.tool === "select") {
+  const showsRoom = build.tool === "select" || build.tool === "door" || build.tool === "erase";
+  if (room && room.role === "hall" && showsRoom) {
+    const where = (room.paths || [])[0];
+    box.append(make("div", { className: "card" },
+      make("strong", { textContent: where ? "Road: " + where : "Main road" }),
+      make("div", { className: "muted", textContent: where ? "This road is the folder " + where + ". It's here because that folder holds applications, and it follows the project, so it can't be edited or removed." : "The top of the project. Everything else connects to it." })));
+  } else if (room && showsRoom) {
     const name = make("input", { value: room.name || "", maxLength: 24, ariaLabel: "Room name" });
     name.onchange = () => { remember(); room.name = name.value; room.locked = true; commit(); };
     const floor = make("select", { ariaLabel: "Floor" });
@@ -478,17 +506,24 @@ function renderBuild(box) {
       make("strong", { textContent: "Room" }), name, floor,
       make("div", { className: "muted", textContent: "Folders that send agents here" }), paths,
       make("div", { className: "muted", textContent: room.locked ? "Edited by you, so the map won't change this room." : "Follows its folder until you edit it." }),
-      room.role && room.role !== "vacant" ? null : make("button", { className: "btn", textContent: "Delete room", onclick: () => {
-        remember();
-        const touching = (d, r) => ((d.x === r.x - 1 || d.x === r.x + r.w) && d.y >= r.y && d.y < r.y + r.h) || ((d.y === r.y - 1 || d.y === r.y + r.h) && d.x >= r.x && d.x < r.x + r.w);
-        layout.doors = layout.doors.filter((d) => !touching(d, room));
-        layout.furniture = layout.furniture.filter((it) => !(inRoom(room, it.x, it.y) || it.room === room.id));
-        layout.rooms = layout.rooms.filter((r) => r !== room);
-        build.room = undefined;
-        commit();
+      room.role && room.role !== "vacant" ? null : make("button", { className: "btn", textContent: room.paths && room.paths[0] && !room.locked ? "Take off the map" : "Delete room", onclick: () => {
+        removeRoom(room);
       } })));
   } else if (build.tool === "select") {
     box.append(make("p", { className: "muted", textContent: "Drag furniture to move it. Click a floor to rename a room, change its floor, or link it to project folders." }));
+  }
+  if ((layout.removed || []).length > 0) {
+    box.append(make("h3", { textContent: "Taken off the map" }));
+    box.append(make("p", { className: "muted", textContent: "Their folders are untouched." }));
+    for (const id of layout.removed) {
+      box.append(make("div", { className: "row" }, make("span", { className: "grow", textContent: id }), make("button", { className: "btn", textContent: "Put back", onclick: async () => {
+        remember();
+        layout.removed = layout.removed.filter((other) => other !== id);
+        commit();
+        await saveLayout();
+        await fetch(api("/api/office/map"), { method: "POST" });
+      } })));
+    }
   }
   const lost = cutOff();
   if (lost.length > 0) box.append(make("p", { className: "warn", textContent: "Agents can't reach: " + lost.map((r) => r.name || r.id).join(", ") + ". Add a door." }));
@@ -594,6 +629,17 @@ async function start() {
       render(true);
     };
   }
+  $("paths").onclick = () => {
+    const on = $("paths").getAttribute("aria-pressed") !== "true";
+    $("paths").setAttribute("aria-pressed", String(on));
+    office.setPathsVisible(on);
+    try { localStorage.setItem("blkc-paths", on ? "on" : "off"); } catch { /* it just won't be remembered */ }
+    showPathsButton();
+  };
+  try {
+    if (localStorage.getItem("blkc-paths") === "off") { $("paths").setAttribute("aria-pressed", "false"); office.setPathsVisible(false); }
+  } catch { /* on by default */ }
+  showPathsButton();
   $("links").onclick = () => {
     const on = $("links").getAttribute("aria-pressed") !== "true";
     $("links").setAttribute("aria-pressed", String(on));
@@ -631,7 +677,9 @@ async function start() {
       layout = next.scene;
       office.setLayout(layout);
       office.setLinksVisible($("links").getAttribute("aria-pressed") === "true");
+      office.setPathsVisible($("paths").getAttribute("aria-pressed") === "true");
       showLinkCount();
+      showPathsButton();
       fit();
     }
     render();

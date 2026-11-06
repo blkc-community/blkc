@@ -311,6 +311,7 @@ export async function startDevServer(root: string, port: number, exactPort: bool
         ...(current?.world ? { world: current.world } : {}),
         ...(current?.layout ? { layout: current.layout, roomHeight: current.roomHeight } : {}),
         ...(current?.links ? { links: current.links } : {}),
+        ...(Array.isArray(incoming.removed) && incoming.removed.length > 0 ? { removed: incoming.removed.filter((id) => typeof id === "string").slice(0, 8000) } : {}),
         seed: current?.seed ?? "project",
         evolve: incoming.evolve !== false,
         cols: Math.min(1024, Math.max(6, Math.floor(Number(incoming.cols) || 24))),

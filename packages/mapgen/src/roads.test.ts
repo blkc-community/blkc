@@ -180,6 +180,20 @@ describe("as the project changes", () => {
     assertSound(back.map);
   });
 
+  it("leaves a building off the map once the user removes it, until restored", () => {
+    const tree = treeOf([road("apps", [app("apps/a"), app("apps/b")])]);
+    const first = layoutRoads(tree, "acme");
+    first.rooms = first.rooms.filter((room) => room.id !== "apps-b");
+    first.furniture = first.furniture.filter((item) => item.room !== "apps-b");
+    first.removed = ["apps-b"];
+    const kept = evolveRoads(first, tree, "acme");
+    expect(kept.map.rooms.some((room) => room.id === "apps-b")).toBe(false);
+    expect(kept.changes).toEqual([]);
+    const restored = evolveRoads({ ...kept.map, removed: [] }, tree, "acme");
+    expect(restored.map.rooms.some((room) => room.id === "apps-b")).toBe(true);
+    assertSound(restored.map);
+  });
+
   it("updates items when a building's parts change", () => {
     const first = layoutRoads(treeOf([road("apps", [app("apps/a", 3)])]), "acme");
     const next = evolveRoads(first, treeOf([road("apps", [app("apps/a", 2)])]), "acme");
