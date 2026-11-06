@@ -60,9 +60,16 @@ async function isJsonSchema(file: string): Promise<boolean> {
 
 async function walkManifests(root: string): Promise<string[]> {
   const found: string[] = [];
-  const entries = await readdir(root, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    // A folder can vanish between listing it and opening it, as a write lock does.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return found;
+    throw error;
+  }
   for (const entry of entries) {
-    if (SKIPPED_FOLDERS.has(entry.name) || entry.name.startsWith(".")) continue;
+    if (SKIPPED_FOLDERS.has(entry.name) || entry.name.startsWith(".") || entry.name.endsWith(".lock")) continue;
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
       found.push(...(await walkManifests(full)));

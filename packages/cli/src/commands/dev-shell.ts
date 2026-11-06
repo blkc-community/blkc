@@ -18,6 +18,8 @@ export const SHELL_HTML = `<!doctype html>
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; display: grid; grid-template: "side main" 1fr / 240px 1fr }
   aside { grid-area: side; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 10px }
   aside h1 { font-size: 15px; margin: 0 6px 12px }
+  #app { display: block; margin: 0 6px 8px; padding: 6px 8px; border-radius: 6px; background: var(--on); color: var(--on-text); text-decoration: none; text-align: center }
+  #app[hidden] { display: none }
   aside h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 6px 4px }
   aside button { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-radius: 6px; padding: 6px; cursor: pointer; overflow-wrap: anywhere }
   aside button:hover { background: var(--bg) }
@@ -50,7 +52,7 @@ export const SHELL_HTML = `<!doctype html>
 </style>
 </head>
 <body>
-<aside aria-label="Your project"><h1>BLKC dev</h1><nav id="nav"></nav></aside>
+<aside aria-label="Your project"><h1>BLKC dev</h1><a id="app" href="/office" hidden>Open the office app</a><nav id="nav"></nav></aside>
 <main>
   <div class="bar">
     <strong id="title"></strong>
@@ -189,4 +191,5 @@ events.addEventListener("change", () => { refresh().catch(() => {}); });
 events.onerror = () => { $("status").textContent = "Disconnected. Is blkc dev still running?"; };
 events.onopen = () => { $("status").textContent = ""; };
 refresh().catch((error) => { $("status").textContent = String(error); });
+fetch("/api/office/kits").then((r) => r.json()).then((kits) => { $("app").hidden = kits.length === 0; }).catch(() => {});
 `;

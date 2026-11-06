@@ -18,6 +18,7 @@ import { registerDeployCommands } from "./commands/deploy.js";
 import { registerCheckCommand, registerValidateAlias } from "./commands/check.js";
 import { registerNewCommand } from "./commands/new.js";
 import { registerDevCommand } from "./commands/dev.js";
+import { registerOfficeCommand } from "./commands/office.js";
 import { VERSION } from "./version.js";
 
 /**
@@ -52,6 +53,7 @@ registerLogbookCommands(program);
 registerDeployCommands(program);
 registerNewCommand(program);
 registerDevCommand(program);
+registerOfficeCommand(program);
 registerCheckCommand(program);
 registerValidateAlias(program);
 

@@ -69,7 +69,7 @@ export function OfficeBlock({ props: p, className, style }: BlockProps<OfficePro
             <canvas
               data-blkc-canvas="office"
               role="img"
-              aria-label={`${heading || "Pixel office"}: ${agents.length} people. Their status is listed beside this picture.`}
+              aria-label={`${heading || "Pixel office"}: ${agents.length} agents. Their status is listed beside this picture.`}
               className="block aspect-[26/17] h-auto w-full touch-manipulation [image-rendering:pixelated]"
               style={p.cols && p.rows ? { aspectRatio: `${p.cols} / ${p.rows}` } : undefined}
             />
@@ -78,7 +78,7 @@ export function OfficeBlock({ props: p, className, style }: BlockProps<OfficePro
           <aside className="flex flex-col gap-6">
             {agents.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">The team</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Agents</h3>
                 <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                   {agents.map((agent, index) => {
                     const state = text(agent.state) || "idle";
