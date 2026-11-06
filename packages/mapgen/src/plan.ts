@@ -3,7 +3,7 @@
  * folder's room looks like. The growing itself is the same for every world.
  */
 
-export type RoomRole = "lobby" | "lounge" | "quests" | "vacant";
+export type RoomRole = "lobby" | "lounge" | "quests" | "vacant" | "hall";
 
 export interface Theme { floor: string; items: string[]; decor: string[] }
 
@@ -16,7 +16,7 @@ export interface WorldPlan {
   footprint: Record<string, { w: number; h: number; spot?: [number, number]; solid?: boolean }>;
   /** Always there. The first is where the map starts. */
   specials: { id: string; name: string; role: RoomRole; floor: string; w: number; h: number }[];
-  furnishing: Record<RoomRole, FurnishStep[]>;
+  furnishing: Partial<Record<RoomRole, FurnishStep[]>>;
   /** What a folder's room is filled with, one for each few files. */
   workstation: string;
   /** Matched against a folder's own name. */

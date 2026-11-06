@@ -307,6 +307,10 @@ export async function startDevServer(root: string, port: number, exactPort: bool
       const current = await readMap(dir);
       await writeMap(dir, {
         version: 1,
+        // What kind of map it is doesn't change when someone moves the furniture.
+        ...(current?.world ? { world: current.world } : {}),
+        ...(current?.layout ? { layout: current.layout, roomHeight: current.roomHeight } : {}),
+        ...(current?.links ? { links: current.links } : {}),
         seed: current?.seed ?? "project",
         evolve: incoming.evolve !== false,
         cols: Math.min(64, Math.max(6, Math.floor(Number(incoming.cols) || 24))),

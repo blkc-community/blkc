@@ -236,6 +236,20 @@ function drawFloor(c: Ctx, room: Room): void {
           for (let i = 0; i < 5; i++) rect(c, i % 2 ? "#747b89" : "#636a78", x + ((tx * 11 + i * 3) % 15), y + ((ty * 5 + i * 5) % 15), 1, 1);
           if (noise === 3) rect(c, "#596070", x + 3, y + 8, 8, 1);
           break;
+        case "hall": {
+          // Polished floor, with a runner down the middle of a corridor's length.
+          rect(c, "#cfc8b8", x, y, TILE, TILE);
+          rect(c, "#bdb6a6", x, y + 15, TILE, 1);
+          rect(c, "#bdb6a6", x + 15, y, 1, TILE);
+          const along = room.w >= room.h;
+          const offset = along ? ty - room.y : tx - room.x;
+          const size = along ? room.h : room.w;
+          if (along && offset === 0) rect(c, "#7f6a55", x, y + 12, TILE, 4);
+          if (along && offset === size - 1) rect(c, "#7f6a55", x, y, TILE, 4);
+          if (!along && offset === 0) rect(c, "#7f6a55", x + 12, y, 4, TILE);
+          if (!along && offset === size - 1) rect(c, "#7f6a55", x, y, 4, TILE);
+          break;
+        }
         case "grass":
           rect(c, "#3f8f4f", x, y, TILE, TILE);
           for (let i = 0; i < 7; i++) rect(c, i % 3 ? "#4aa35c" : "#347a43", x + ((tx * 5 + i * 9) % 15), y + ((ty * 7 + i * 3) % 14), 1, 2);
@@ -260,6 +274,23 @@ const WALL_FACE = "#5c628f";
 const WALL_DARK = "#4a4f78";
 const WALL_LIGHT = "#6d74a4";
 
+/** Outside the building: lawn, with the odd shrub and tree. */
+function drawGrounds(c: Ctx, tx: number, ty: number): void {
+  const x = tx * TILE;
+  const y = ty * TILE;
+  rect(c, (tx + ty) % 2 === 0 ? "#4b8a4f" : "#478549", x, y, TILE, TILE);
+  const noise = (tx * 73 + ty * 151) % 29;
+  for (let i = 0; i < 4; i++) rect(c, "#5a9b5c", x + ((tx * 5 + i * 7) % 15), y + ((ty * 3 + i * 5) % 15), 1, 2);
+  if (noise === 4) {
+    rect(c, "#2f6a38", x + 3, y + 7, 10, 7);
+    rect(c, "#3c7f45", x + 5, y + 8, 5, 3);
+  } else if (noise === 11) {
+    rect(c, "#5b3a22", x + 7, y + 10, 2, 5);
+    rect(c, "#24592e", x + 2, y + 1, 12, 10);
+    rect(c, "#2f6f3a", x + 4, y + 2, 7, 5);
+  }
+}
+
 function drawWalls(c: Ctx, world: World, palette: Palette, daylight: Daylight): void {
   const open = new Set<string>();
   for (const room of world.rooms) {
@@ -273,12 +304,23 @@ function drawWalls(c: Ctx, world: World, palette: Palette, daylight: Daylight): 
       if (open.has(key) || doors.has(key)) continue;
       const x = tx * TILE;
       const y = ty * TILE;
+      const nearBuilding = (cx: number, cy: number): boolean => {
+        for (let ay = cy - 1; ay <= cy + 1; ay++) {
+          for (let ax = cx - 1; ax <= cx + 1; ax++) if (open.has(`${ax},${ay}`) || doors.has(`${ax},${ay}`)) return true;
+        }
+        return false;
+      };
+      if (!nearBuilding(tx, ty)) {
+        drawGrounds(c, tx, ty);
+        continue;
+      }
       if (open.has(`${tx},${ty + 1}`)) {
         rect(c, WALL_FACE, x, y, TILE, TILE);
         rect(c, WALL_LIGHT, x, y, TILE, 1);
         rect(c, WALL_DARK, x, y + 12, TILE, 4);
         rect(c, palette.primary, x, y + 11, TILE, 1);
-        if (tx % 4 === 3 && !world.furniture.some((item) => specOf(world, item).wall && item.x === tx && item.y === ty)) {
+        // Windows look outside, so only an outer wall has them.
+        if (tx % 4 === 3 && !nearBuilding(tx, ty - 1) && !world.furniture.some((item) => specOf(world, item).wall && item.x === tx && item.y === ty)) {
           // A window, in the colour of the sky right now.
           rect(c, "#1f2937", x + 1, y + 1, 14, 9);
           rect(c, daylight.sky, x + 2, y + 2, 12, 7);
