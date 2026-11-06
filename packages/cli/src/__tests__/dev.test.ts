@@ -80,7 +80,7 @@ describe("blkc dev", () => {
     blkc("new", "kit", "pixel-office");
     await startDev();
     const html = await frame("kits/pixel-office");
-    expect(html).toContain("blkc-hero");
+    expect(html).toContain("blkc-office");
     expect(html).toContain("--blkc-color-background:#14142b");
     expect(html).toContain("Press%20Start%202P");
     expect(html).toMatch(/<style>.*\.bg-primary/s);
@@ -149,7 +149,7 @@ describe("blkc dev", () => {
     writeFileSync(file, good);
     const fixed = JSON.parse(await text("/api/state"));
     expect(fixed.issues).toEqual([]);
-    expect(await frame("kits/pixel-office")).toContain("blkc-hero");
+    expect(await frame("kits/pixel-office")).toContain("blkc-office");
   });
 
   it("only serves what the scan found, so a path can't reach other files", async () => {
@@ -210,6 +210,25 @@ describe("blkc dev", () => {
     writeFileSync(file, "{ half");
     expect(await frame("kits/pixel-office")).toContain("Nova");
     expect(JSON.parse(await text("/api/state")).issues).toEqual([]);
+  });
+
+  it("opens links to other sites in a new tab, so a click can't replace the preview", async () => {
+    blkc("new", "kit", "pixel-office");
+    await startDev();
+    for (const page of [undefined, "blocks"]) {
+      const html = await frame("kits/pixel-office", page);
+      const away = [...html.matchAll(/<a\b[^>]*href="(?!#)[^"]*"[^>]*>/g)].map((m) => m[0]);
+      for (const tag of away) expect(tag, tag).toContain('target="_blank"');
+    }
+    expect(await frame("kits/pixel-office")).not.toContain('target="_self"');
+  });
+
+  it("puts the office first on the Pixel Office home page", async () => {
+    blkc("new", "kit", "pixel-office");
+    await startDev();
+    const html = await frame("kits/pixel-office");
+    expect(html.indexOf("blkc-office")).toBeLessThan(html.indexOf("blkc-services"));
+    expect(html.slice(0, html.indexOf("blkc-office"))).not.toContain("blkc-hero");
   });
 
   it("shows the Kit's Every Block page", async () => {

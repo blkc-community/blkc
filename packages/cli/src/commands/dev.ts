@@ -168,8 +168,7 @@ async function scan(root: string): Promise<{ state: State; files: Map<string, It
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 
-/** Links in a preview open in a new tab, so a click can't navigate the frame away. */
-const FRAME_HEAD = `<base target="_blank"><style>${stylesheet}</style>`;
+const FRAME_HEAD = `<style>${stylesheet}</style>`;
 
 // A frame holds rendered manifest content, so the only script it can run is our canvas runtime, and it
 // has no network beyond images and web fonts.
@@ -240,7 +239,7 @@ export async function startDevServer(root: string, port: number, exactPort: bool
       const manifest = await loadManifest(item.file, item.kind);
       const page = url.searchParams.get("page") ?? undefined;
       const nonce = randomBytes(16).toString("hex");
-      const html = renderManifestDocument(manifest, { page, head: FRAME_HEAD + (css ? `<style>${css}</style>` : ""), canvasRuntime, nonce });
+      const html = renderManifestDocument(manifest, { page, head: FRAME_HEAD + (css ? `<style>${css}</style>` : ""), canvasRuntime, nonce, inFrame: true });
       return send(res, 200, "text/html", html, frameCsp(nonce));
     }
     send(res, 404, "text/plain", "Not found");

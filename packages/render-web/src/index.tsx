@@ -197,7 +197,7 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
               <a
                 href={utils.normalizeUrl(cta.href)}
                 className={ctaClass(cta.variant)}
-                target={cta.target || "_self"}
+                target={cta.target}
                 rel={cta.target === "_blank" ? "noopener noreferrer" : undefined}
               >
                 {cta.label}
@@ -207,7 +207,7 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
               <a
                 href={utils.normalizeUrl(secondaryCta.href)}
                 className={ctaClass(secondaryCta.variant ?? "outline")}
-                target={secondaryCta.target || "_self"}
+                target={secondaryCta.target}
                 rel={secondaryCta.target === "_blank" ? "noopener noreferrer" : undefined}
               >
                 {secondaryCta.label}
@@ -346,7 +346,7 @@ function ButtonBlock({ props: p, className, style }: BlockProps<ButtonProps>): R
     variant = "primary",
     size = "md",
     alignment = "center",
-    target = "_self",
+    target,
     icon,
     iconPosition = "left",
   } = p;

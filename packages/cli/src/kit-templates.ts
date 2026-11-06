@@ -11,7 +11,7 @@ const pixelOfficeKit = {
   "name": "Pixel Office",
   "summary": "A free Kit: a living pixel-art office for your project, plus a landing page.",
   "description": "Your agents and tasks become characters and quests in a pixel-art office, drawn by @blkc-code/render-canvas. The rest of the Kit shows every web Block with one theme.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "category": "showcase",
   "tags": [
     "pixel",
@@ -143,29 +143,10 @@ const pixelOfficeKit = {
         "title": "Home",
         "blocks": [
           {
-            "block": "hero",
-            "props": {
-              "eyebrow": "Free and MIT licensed",
-              "heading": "Pixel Office",
-              "subheading": "Your agents and tasks, alive in a pixel-art office. Click someone to see what they are doing.",
-              "cta": {
-                "label": "Get the Kit",
-                "href": "https://github.com/blkc-community/kits/tree/main/pixel-office"
-              },
-              "secondaryCta": {
-                "label": "Read the docs",
-                "href": "https://blkc.blackcode.space/docs/quickstart",
-                "variant": "outline"
-              },
-              "size": "md",
-              "align": "center"
-            }
-          },
-          {
             "block": "office",
             "props": {
-              "heading": "Meet the team",
-              "intro": "Everyone here is data. Change a status in JSON and they get up and walk to where that work happens.",
+              "heading": "Pixel Office",
+              "intro": "Your agents and tasks, alive in a pixel-art office. Click someone to see what they are doing. Everyone here is data: change a status in JSON and they get up and walk to where that work happens.",
               "agents": [
                 {
                   "id": "nova",
@@ -295,8 +276,8 @@ const pixelOfficeKit = {
               "heading": "Make it your own",
               "text": "Fork the Kit and run it on your machine in under a minute.",
               "cta": {
-                "label": "See how",
-                "href": "https://blkc.blackcode.space/docs/quickstart"
+                "label": "Get the Kit",
+                "href": "https://github.com/blkc-community/kits/tree/main/pixel-office"
               }
             }
           }
