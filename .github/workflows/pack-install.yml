@@ -36,6 +36,9 @@ jobs:
           npm run build --workspace=packages/logbook
           npm run build --workspace=packages/render-web
           npm run build --workspace=packages/render-canvas
+          npm run build --workspace=packages/mapgen
+          npm run build --workspace=packages/agents
+          npm run build --workspace=packages/connect
           npm run build --workspace=packages/cli
       - name: Pack
         run: npm pack --workspace=packages/cli --pack-destination "$RUNNER_TEMP"

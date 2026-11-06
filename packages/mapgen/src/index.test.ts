@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createWorld, findPath } from "@blkc-code/render-canvas";
-import { evolveMap, roomForPath, scanProject, type OfficeMap, type ProjectScan } from "../office/mapgen.js";
+import { evolveMap, roomForPath, scanProject, type OfficeMap, type ProjectScan } from "./index.js";
 
 const area = (rel: string, files: number) => ({ id: rel.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: rel.split("/").pop() as string, path: `${rel}/`, files });
 const scanOf = (...areas: [string, number][]): ProjectScan => ({ rootFiles: 3, areas: areas.map(([r, f]) => area(r, f)) });

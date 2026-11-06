@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/cli",
-    "build:all": "npm run build --if-present -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/cli",
+    "build": "npm run build -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/mapgen -w @blkc-code/agents -w @blkc-code/connect -w @blkc-code/cli",
+    "build:all": "npm run build --if-present -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/mapgen -w @blkc-code/agents -w @blkc-code/connect -w @blkc-code/cli",
     "test": "npm run test --workspaces",
     "test:all": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces",
@@ -54,7 +54,7 @@
   "bugs": {
     "url": "https://github.com/blkc-community/blkc/issues"
   },
-  "homepage": "https://blkc.community",
+  "homepage": "https://blkc.blackcode.space",
   "dependencies": {
     "@blkc-code/core": "^0.1.0",
     "@blkc-code/render-web": "^0.1.0"
