@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/core",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "BLKC core schemas and types for Blocks, Kits, Circuits, and Logbook",
   "main": "dist/index.js",

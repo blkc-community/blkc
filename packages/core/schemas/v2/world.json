@@ -51,6 +51,51 @@
         "maxLength": 200,
         "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$)).+$"
       }
+    },
+    "roads": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$)).+$"
+      }
+    },
+    "fileGroups": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 24
+      },
+      "additionalProperties": {
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
+    "partTypes": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 24
+      },
+      "additionalProperties": {
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$)).+$"
+        }
+      }
     }
   },
   "additionalProperties": false,

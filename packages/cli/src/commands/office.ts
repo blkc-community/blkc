@@ -14,8 +14,9 @@ import path from "node:path";
 import process from "node:process";
 import { AGENT_STATES, nextTask, normalizeState, removeAgent, serveOverStdio, setAgent } from "@blkc-code/agents";
 import { PROJECT_CLIENTS, HOOK_FILE, codexCommand, connectClient, disconnectClient, hermesSettings, manualSettings } from "@blkc-code/connect";
+import { scanTree, type TreeNode } from "@blkc-code/mapgen";
 import { VERSION } from "../version.js";
-import { STATE_FILE, areaForFile, evolveKitMap, kitStore, projectRoot, readMap, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
+import { STATE_FILE, areaForFile, evolveKitMap, kitStore, projectRoot, readMap, readTreeOptions, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
 
 /** Start with an empty office the first time, so the sample team isn't mixed in with real agents. */
 async function startEmpty(kitDir: string): Promise<boolean> {
@@ -101,6 +102,37 @@ export function registerOfficeCommand(program: Command): void {
           picked = { title: quest.title, detail: quest.detail ?? "" };
         });
         console.log(JSON.stringify(picked ?? null));
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  office
+    .command("tree")
+    .description("Show how this project reads as a world: its roads, buildings, items and loose files.")
+    .option("--kit <path>", "The Kit, if there is more than one")
+    .option("--json", "Print it as JSON")
+    .action(async (options: { kit?: string; json?: boolean }) => {
+      try {
+        const root = projectRoot(process.cwd());
+        const kit = await resolveKit(options.kit, process.cwd()).catch(() => undefined);
+        const tree = scanTree(root, readTreeOptions(kit, root));
+        if (options.json) {
+          console.log(JSON.stringify(tree, null, 2));
+          return;
+        }
+        const show = (node: TreeNode, depth: number): void => {
+          const pad = "  ".repeat(depth);
+          const count = node.files === undefined ? "" : chalk.gray(` ${node.files} files`);
+          if (node.kind === "file") return;
+          if (node.kind === "group") console.log(`${pad}${chalk.yellow(node.name)} ${chalk.gray(node.children.map((file) => file.name).join(", "))}`);
+          else if (node.kind === "part") console.log(`${pad}${chalk.cyan(node.item ?? "Item")}: ${node.name}${count}`);
+          else console.log(`${pad}${node.kind === "road" ? chalk.bold(node.path || "/") : chalk.green(node.name)}${count}`);
+          for (const child of node.children) show(child, depth + 1);
+        };
+        show(tree.root, 0);
+        if (tree.secrets.length > 0) console.log(`${chalk.red("Vault")} ${chalk.gray(tree.secrets.map((file) => file.path).join(", "))}`);
+        if (tree.truncated) console.log(chalk.yellow("This project is very large, so the scan stopped early and some of it isn't shown."));
       } catch (error) {
         fail(error);
       }

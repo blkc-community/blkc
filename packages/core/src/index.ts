@@ -783,6 +783,12 @@ export const WorldConfigSchema = z
     include: z.array(ProjectPathSchema).max(50).optional(),
     /** Folders that never get a building. A folder name, or a path from the top of the project. */
     ignore: z.array(ProjectPathSchema).max(100).optional(),
+    /** Folders to walk even if gitignored or separate repos, such as "external/". */
+    roads: z.array(ProjectPathSchema).max(50).optional(),
+    /** File-name patterns for grouping loose files: { "Docs": ["*.md"] }. Added to, or replacing, the built-in groups. */
+    fileGroups: z.record(z.string().min(1).max(24), z.array(z.string().min(1).max(100)).max(50)).optional(),
+    /** Folder names that become an item in a building: { "Server rack": ["api", "billing/queue"] }. */
+    partTypes: z.record(z.string().min(1).max(24), z.array(ProjectPathSchema).max(50)).optional(),
   })
   .strict();
 
