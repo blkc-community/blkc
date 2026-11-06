@@ -194,7 +194,7 @@ By contributing to BLKC, you agree that your contributions will be licensed unde
 ## Resources
 
 - [GitHub Repository](https://github.com/blkc-community/blkc)
-- [Documentation](https://blkc.community) (coming soon)
+- [Documentation](https://blkc.blackcode.space)
 - [Issues](https://github.com/blkc-community/blkc/issues)
 - [Discussions](https://github.com/blkc-community/blkc/discussions)
 

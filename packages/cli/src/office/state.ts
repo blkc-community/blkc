@@ -1,84 +1,19 @@
 /**
- * The office's live state: who is here, what they are doing, and the quests. It lives in
- * office-state.json beside a Kit. The app, the MCP server, `blkc office set` and the hooks
- * all go through this file, so any agent can take part and nothing needs a server running.
+ * Where an office lives in a project: which Kits have one, and their state and map files.
+ * The state itself is @blkc-code/agents, and the map is @blkc-code/mapgen.
  */
 
-import { Buffer } from "node:buffer";
 import { readdirSync, readFileSync } from "node:fs";
-import { mkdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout as wait } from "node:timers/promises";
+import { createFileStore, type AgentStore, type AgentsState } from "@blkc-code/agents";
+import { evolveMap, roomForPath, scanProject, type OfficeMap } from "@blkc-code/mapgen";
 import { discover } from "../commands/check.js";
-import { evolveMap, roomForPath, scanProject, type OfficeMap } from "./mapgen.js";
-
-export const AGENT_STATES = ["working", "thinking", "blocked", "reviewing", "idle", "done", "away"] as const;
-export const TASK_STATES = ["todo", "doing", "done"] as const;
-export type AgentState = (typeof AGENT_STATES)[number];
-export type TaskState = (typeof TASK_STATES)[number];
-
-export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string; area?: string }
-export interface Quest {
-  title: string;
-  state: TaskState;
-  agent?: string;
-  detail?: string;
-  /** Who added it. A quest from another agent is never handed out automatically. */
-  by?: string;
-}
-export interface OfficeState { agents: Agent[]; tasks: Quest[]; stats: { questsDone: number } }
 
 export const STATE_FILE = "office-state.json";
 export const MAP_FILE = "office-map.json";
-const MAX_AGENTS = 40;
-const MAX_TASKS = 60;
-export const MAX_STATE_BYTES = 256 * 1024;
-const LOCK_STALE_MS = 5000;
 
 type Json = Record<string, unknown>;
-
-const text = (value: unknown, max: number): string =>
-  typeof value === "string" ? [...value].filter((c) => c >= " " || c === "\t").join("").trim().slice(0, max) : "";
-
-export const slug = (value: string): string =>
-  value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-
-/** Whatever came in, from a file or an agent, as something safe to keep and draw. */
-export function normalizeState(raw: unknown): OfficeState {
-  const input = (raw ?? {}) as Json;
-  const seen = new Set<string>();
-  const agents: Agent[] = [];
-  for (const item of Array.isArray(input["agents"]) ? (input["agents"] as Json[]) : []) {
-    const id = slug(text(item?.["id"], 60) || text(item?.["name"], 60));
-    if (!id || seen.has(id) || agents.length >= MAX_AGENTS) continue;
-    seen.add(id);
-    const state = AGENT_STATES.includes(item["state"] as AgentState) ? (item["state"] as AgentState) : "idle";
-    const agent: Agent = { id, name: text(item["name"], 24) || id, state };
-    const role = text(item["role"], 40);
-    const task = text(item["task"], 120);
-    if (role) agent.role = role;
-    if (task) agent.task = task;
-    const area = text(item["area"], 60);
-    if (area) agent.area = area;
-    agents.push(agent);
-  }
-  const tasks: Quest[] = [];
-  for (const item of Array.isArray(input["tasks"]) ? (input["tasks"] as Json[]) : []) {
-    const title = text(item?.["title"], 80);
-    if (!title || tasks.length >= MAX_TASKS) continue;
-    const quest: Quest = { title, state: TASK_STATES.includes(item["state"] as TaskState) ? (item["state"] as TaskState) : "todo" };
-    const agent = slug(text(item["agent"], 60));
-    if (agent) quest.agent = agent;
-    const detail = typeof item["detail"] === "string" ? (item["detail"] as string).split("\n").map((line) => text(line, 1000)).join("\n").trim().slice(0, 1000) : "";
-    if (detail) quest.detail = detail;
-    const by = text(item["by"], 60);
-    if (by) quest.by = by;
-    tasks.push(quest);
-  }
-  const stats = (input["stats"] ?? {}) as Json;
-  const questsDone = typeof stats["questsDone"] === "number" && stats["questsDone"] >= 0 ? Math.floor(stats["questsDone"] as number) : 0;
-  return { agents, tasks, stats: { questsDone } };
-}
 
 function readJsonSync(file: string): Json | undefined {
   try {
@@ -137,89 +72,12 @@ export async function resolveKit(kit: string | undefined, cwd: string): Promise<
   return kits[0] as string;
 }
 
-export async function readOfficeState(kitDir: string): Promise<OfficeState> {
-  try {
-    const content = await readFile(path.join(kitDir, STATE_FILE), "utf8");
-    return normalizeState(JSON.parse(content));
-  } catch {
-    return normalizeState(findOfficeBlock(kitDir));
-  }
-}
+/** A Kit's state, starting from the team its office Block describes. */
+export const kitStore = (kitDir: string): AgentStore => createFileStore(path.join(kitDir, STATE_FILE), () => findOfficeBlock(kitDir));
 
-/** Several agents can write at once, so changes go one at a time, and a write is all or nothing. */
-export async function updateOfficeState(kitDir: string, change: (state: OfficeState) => void): Promise<OfficeState> {
-  const file = path.join(kitDir, STATE_FILE);
-  const lock = `${file}.lock`;
-  let held = false;
-  for (let attempt = 0; attempt < 80 && !held; attempt++) {
-    try {
-      await mkdir(lock);
-      held = true;
-    } catch {
-      try {
-        // Whoever held this crashed.
-        if (Date.now() - (await stat(lock)).mtimeMs > LOCK_STALE_MS) await rmdir(lock);
-      } catch {
-        // gone already
-      }
-      await wait(25);
-    }
-  }
-  if (!held) throw new Error("The office is busy. Try again.");
-  try {
-    const state = await readOfficeState(kitDir);
-    const wasDone = new Set(state.tasks.filter((task) => task.state === "done").map((task) => task.title));
-    change(state);
-    const next = normalizeState(state);
-    // Progress counts every quest ever finished, so deleting one doesn't lose it.
-    next.stats.questsDone += next.tasks.filter((task) => task.state === "done" && !wasDone.has(task.title)).length;
-    const body = JSON.stringify(next, null, 2) + "\n";
-    if (Buffer.byteLength(body) > MAX_STATE_BYTES) throw new Error("The office state is too large.");
-    const temp = `${file}.${process.pid}.tmp`;
-    await writeFile(temp, body);
-    try {
-      await rename(temp, file);
-    } catch (error) {
-      await rm(temp, { force: true });
-      throw error;
-    }
-    return next;
-  } finally {
-    await rmdir(lock).catch(() => undefined);
-  }
-}
+export const readOfficeState = (kitDir: string): Promise<AgentsState> => kitStore(kitDir).read();
 
-export function setAgent(state: OfficeState, patch: { id?: string; name?: string; role?: string; state?: string; task?: string }): Agent {
-  const id = slug(patch.id || patch.name || "");
-  if (!id) throw new Error("An agent needs an id or a name.");
-  let agent = state.agents.find((a) => a.id === id);
-  if (!agent) {
-    agent = { id, name: patch.name || patch.id || id, state: "idle" };
-    state.agents.push(agent);
-  }
-  if (patch.name) agent.name = patch.name;
-  if (patch.role !== undefined) agent.role = patch.role;
-  if (patch.state !== undefined) {
-    if (!AGENT_STATES.includes(patch.state as AgentState)) throw new Error(`State must be one of: ${AGENT_STATES.join(", ")}`);
-    agent.state = patch.state as AgentState;
-  }
-  if (patch.task !== undefined) agent.task = patch.task;
-  return agent;
-}
-
-export function removeAgent(state: OfficeState, id: string): boolean {
-  const before = state.agents.length;
-  state.agents = state.agents.filter((a) => a.id !== slug(id));
-  return state.agents.length < before;
-}
-
-/** A quest for this agent: its own first, then one nobody has taken. Quests from other agents wait for a person. */
-export function nextQuest(state: OfficeState, agentId: string, aliases: string[] = []): Quest | undefined {
-  const mine = [agentId, ...aliases];
-  const trusted = (quest: Quest): boolean => !quest.by || quest.by === "user";
-  return state.tasks.find((quest) => quest.state === "todo" && quest.agent !== undefined && mine.includes(quest.agent))
-    ?? state.tasks.find((quest) => quest.state === "todo" && quest.agent === undefined && trusted(quest));
-}
+export const updateOfficeState = (kitDir: string, change: (state: AgentsState) => void): Promise<AgentsState> => kitStore(kitDir).update(change);
 
 /** The project's name is the map's seed, so no two projects get the same building. */
 export function projectSeed(root: string): string {

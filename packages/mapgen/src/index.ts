@@ -1,5 +1,5 @@
 /**
- * Grows a building from a project. Every project gets its own map: the seed comes from its
+ * BLKC Mapgen. Grows a building from a project. Every project gets its own map: the seed comes from its
  * name, and the rooms from its folders. The map evolves rather than regenerates: rooms that
  * exist stay where they are, new folders add rooms, bigger folders get bigger rooms, and a
  * room someone has edited by hand is never touched again.

@@ -1,18 +1,15 @@
 /**
- * `blkc office mcp`: the office as an MCP server, so any agent that speaks MCP can join,
- * report what it is doing and work the quest board. It only reads and writes
- * office-state.json in one Kit, and runs nothing it is given.
+ * The MCP server, so any agent that speaks MCP can join, report what it is doing and work
+ * the board. It only reads and writes its store, and runs nothing it is given.
  *
  * stdout belongs to the protocol. Nothing else may print there.
  */
 
-import path from "node:path";
-import process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { VERSION } from "../version.js";
-import { AGENT_STATES, TASK_STATES, areaForFile, nextQuest, readOfficeState, removeAgent, setAgent, slug, updateOfficeState, type Quest } from "./state.js";
+import { AGENT_STATES, TASK_STATES, nextTask, removeAgent, setAgent, slug, type Task } from "./state.js";
+import type { AgentStore } from "./store.js";
 
 const INSTRUCTIONS = `This connects you to a pixel-art office where the user can watch agents work.
 Call office_status when you start something and whenever your state changes: "working", "thinking", "blocked" when you need the user, "reviewing", "done" when finished. Keep "task" to a few plain words.
@@ -23,15 +20,25 @@ Call office_leave when you finish the session.`;
 const reply = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 const failure = (error: unknown) => ({ isError: true, content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }] });
 
-function findQuest(tasks: Quest[], quest: string): Quest {
+function findQuest(tasks: Task[], quest: string): Task {
   const number = Number(quest);
   const found = Number.isInteger(number) && number >= 1 ? tasks[number - 1] : tasks.find((t) => t.title.toLowerCase() === quest.toLowerCase());
   if (!found) throw new Error(`There is no quest "${quest}". Use office_view to see them.`);
   return found;
 }
 
-export async function runOfficeMcp(kitDir: string): Promise<void> {
-  const server = new McpServer({ name: "blkc-office", version: VERSION }, { instructions: INSTRUCTIONS });
+export interface ServeOptions {
+  /** Reported to the agent's client. */
+  version: string;
+  /** Which area of the project a file belongs to, if the host knows. The path isn't kept. */
+  areaForFile?: (file: string) => Promise<string | undefined>;
+  /** Written to stderr once connected. stdout is the protocol. */
+  banner?: string;
+}
+
+/** The MCP server for a store, not yet connected to anything. */
+export function createAgentServer(store: AgentStore, options: ServeOptions): McpServer {
+  const server = new McpServer({ name: "blkc-office", version: options.version }, { instructions: INSTRUCTIONS });
 
   // An agent that doesn't give its own name appears as the app that launched this server.
   const self = (agent?: string): { id: string; name: string } => {
@@ -53,8 +60,8 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
   }, async ({ state, task, agent, role, file }) => {
     try {
       const who = self(agent);
-      const area = file ? await areaForFile(kitDir, process.cwd(), file) : undefined;
-      await updateOfficeState(kitDir, (office) => {
+      const area = file ? await options.areaForFile?.(file) : undefined;
+      await store.update((office) => {
         setAgent(office, { ...who, state, task: task ?? "", ...(role ? { role } : {}) });
         const me = office.agents.find((a) => a.id === who.id);
         if (me && area) me.area = area;
@@ -72,7 +79,7 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
   }, async ({ agent }) => {
     try {
       const who = self(agent);
-      await updateOfficeState(kitDir, (office) => { removeAgent(office, who.id); });
+      await store.update((office) => { removeAgent(office, who.id); });
       return reply(`${who.name} has left.`);
     } catch (error) {
       return failure(error);
@@ -83,7 +90,7 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
     title: "See the office",
     description: "See who is in the office and the quest board.",
     annotations: { readOnlyHint: true },
-  }, async () => reply(await readOfficeState(kitDir)));
+  }, async () => reply(await store.read()));
 
   server.registerTool("office_next_quest", {
     title: "Pick up your next quest",
@@ -92,9 +99,9 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
   }, async ({ agent }) => {
     try {
       const who = self(agent);
-      let picked: Quest | undefined;
-      await updateOfficeState(kitDir, (office) => {
-        picked = nextQuest(office, who.id);
+      let picked: Task | undefined;
+      await store.update((office) => {
+        picked = nextTask(office, who.id);
         if (!picked) return;
         picked.state = "doing";
         picked.agent = who.id;
@@ -114,7 +121,7 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
     try {
       const who = self(agent);
       let title = "";
-      await updateOfficeState(kitDir, (office) => {
+      await store.update((office) => {
         const found = quest ? findQuest(office.tasks, quest) : office.tasks.find((t) => t.state === "doing" && t.agent === who.id);
         if (!found) throw new Error("You have no quest in progress. Use office_next_quest first.");
         found.state = "done";
@@ -139,7 +146,7 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
   }, async ({ title, state, agent, detail }) => {
     try {
       const by = self().id;
-      await updateOfficeState(kitDir, (office) => { office.tasks.push({ title, state: state ?? "todo", by, ...(agent ? { agent: slug(agent) } : {}), ...(detail ? { detail } : {}) }); });
+      await store.update((office) => { office.tasks.push({ title, state: state ?? "todo", by, ...(agent ? { agent: slug(agent) } : {}), ...(detail ? { detail } : {}) }); });
       return reply(`Added "${title}".`);
     } catch (error) {
       return failure(error);
@@ -157,7 +164,7 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
   }, async ({ quest, state, agent }) => {
     try {
       let title = quest;
-      await updateOfficeState(kitDir, (office) => {
+      await store.update((office) => {
         const found = findQuest(office.tasks, quest);
         title = found.title;
         if (state) found.state = state;
@@ -169,6 +176,11 @@ export async function runOfficeMcp(kitDir: string): Promise<void> {
     }
   });
 
-  await server.connect(new StdioServerTransport());
-  process.stderr.write(`BLKC office MCP server: ${path.basename(kitDir)}\n`);
+  return server;
+}
+
+/** Serve a store to one agent over stdio. */
+export async function serveOverStdio(store: AgentStore, options: ServeOptions): Promise<void> {
+  await createAgentServer(store, options).connect(new StdioServerTransport());
+  if (options.banner) process.stderr.write(`${options.banner}\n`);
 }

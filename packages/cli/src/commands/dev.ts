@@ -30,8 +30,9 @@ import { discover, kindOf, validateOne, type CheckIssue } from "./check.js";
 import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
 import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
 import { OFFICE_HTML, OFFICE_JS } from "../office/app.js";
-import type { OfficeMap } from "../office/mapgen.js";
-import { MAX_STATE_BYTES, STATE_FILE, MAP_FILE, evolveKitMap, findOfficeBlock, findOfficeKits, normalizeState, readMap, readOfficeState, updateOfficeState, writeMap, type OfficeState } from "../office/state.js";
+import { MAX_STATE_BYTES, diffEvents, normalizeState, type AgentsState } from "@blkc-code/agents";
+import type { OfficeMap } from "@blkc-code/mapgen";
+import { STATE_FILE, MAP_FILE, evolveKitMap, findOfficeBlock, findOfficeKits, readMap, readOfficeState, updateOfficeState, writeMap } from "../office/state.js";
 
 const DEFAULT_PORT = 4173;
 const PORT_ATTEMPTS = 20;
@@ -247,14 +248,11 @@ function desktopNotify(title: string, message: string): void {
 }
 
 /** What needs a person's attention, between one state of the office and the next. */
-export function alertsBetween(before: OfficeState | undefined, after: OfficeState): { title: string; message: string }[] {
-  if (!before) return [];
+export function alertsBetween(before: AgentsState | undefined, after: AgentsState): { title: string; message: string }[] {
   const out: { title: string; message: string }[] = [];
-  for (const agent of after.agents) {
-    const was = before.agents.find((a) => a.id === agent.id);
-    if (was?.state === agent.state) continue;
-    if (agent.state === "blocked") out.push({ title: `${agent.name} needs you`, message: agent.task || "This agent is stuck." });
-    if (was && agent.state === "done") out.push({ title: `${agent.name} finished`, message: agent.task || "Ready for what is next." });
+  for (const event of diffEvents(before, after)) {
+    if (event.type === "agent.blocked") out.push({ title: `${event.agent.name} needs you`, message: event.agent.task || "This agent is stuck." });
+    if (event.type === "agent.finished") out.push({ title: `${event.agent.name} finished`, message: event.agent.task || "Ready for what is next." });
   }
   return out;
 }
@@ -413,7 +411,7 @@ export async function startDevServer(root: string, port: number, exactPort: bool
   }
 
   // The map follows the project, and alerts follow the agents.
-  const lastStates = new Map<string, OfficeState>();
+  const lastStates = new Map<string, AgentsState>();
   const syncOffices = async (evolve: boolean): Promise<void> => {
     for (const dir of await findOfficeKits(root)) {
       if (evolve) {
