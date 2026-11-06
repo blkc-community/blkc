@@ -38,7 +38,12 @@ describe("the default layout", () => {
       expect(item.x + spec.w).toBeLessThanOrEqual(DEFAULT_LAYOUT.cols);
       expect(item.y + spec.h).toBeLessThanOrEqual(DEFAULT_LAYOUT.rows);
     }
-    for (const door of DEFAULT_LAYOUT.doors) expect(isWalkable(world, door.x, door.y)).toBe(true);
+    for (const door of DEFAULT_LAYOUT.doors) {
+      expect(isWalkable(world, door.x, door.y)).toBe(true);
+      // A door must lead somewhere on both sides, not into furniture.
+      const across = [[door.x - 1, door.y], [door.x + 1, door.y], [door.x, door.y - 1], [door.x, door.y + 1]] as const;
+      expect(across.filter(([x, y]) => isWalkable(world, x, y)).length).toBeGreaterThanOrEqual(2);
+    }
   });
 });
 

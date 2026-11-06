@@ -36,16 +36,16 @@ export const DEFAULT_LAYOUT = {
   rooms: [
     { id: "studio", name: "Studio", x: 1, y: 3, w: 15, h: 13, floor: "wood" },
     { id: "lounge", name: "Lounge", x: 17, y: 3, w: 8, h: 6, floor: "carpet" },
-    { id: "quests", name: "Quest room", x: 17, y: 10, w: 8, h: 6, floor: "tile" },
+    { id: "quests", name: "Quests", x: 17, y: 10, w: 8, h: 6, floor: "tile" },
   ] as OfficeRoom[],
-  doors: [{ x: 16, y: 6 }, { x: 16, y: 13 }, { x: 20, y: 9 }] as OfficeDoor[],
+  doors: [{ x: 16, y: 6 }, { x: 16, y: 13 }, { x: 23, y: 9 }] as OfficeDoor[],
   furniture: [
     { type: "desk", x: 2, y: 4 }, { type: "desk", x: 7, y: 4 }, { type: "desk", x: 12, y: 4 },
     { type: "desk", x: 2, y: 10 }, { type: "desk", x: 7, y: 10 }, { type: "desk", x: 12, y: 10 },
     { type: "plant", x: 1, y: 8 }, { type: "plant", x: 15, y: 8 }, { type: "server", x: 15, y: 15 }, { type: "server", x: 14, y: 15 },
     { type: "shelf", x: 1, y: 15 },
-    { type: "coffee", x: 17, y: 3 }, { type: "water", x: 19, y: 3 }, { type: "sofa", x: 21, y: 3 }, { type: "rug", x: 20, y: 5 }, { type: "plant", x: 24, y: 8 },
-    { type: "board", x: 18, y: 10 }, { type: "table", x: 19, y: 13 }, { type: "plant", x: 24, y: 15 },
+    { type: "coffee", x: 19, y: 3 }, { type: "water", x: 21, y: 3 }, { type: "sofa", x: 22, y: 3 }, { type: "rug", x: 20, y: 5 }, { type: "plant", x: 24, y: 8 },
+    { type: "board", x: 19, y: 10 }, { type: "table", x: 19, y: 13 }, { type: "plant", x: 24, y: 15 },
   ] as OfficeFurniture[],
 };
 
