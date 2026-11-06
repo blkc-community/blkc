@@ -27,6 +27,7 @@ import {
 } from "@blkc-code/core";
 
 const MANIFEST_NAMES = ["block.json", "kit.json", "circuit.json", "manifest.json"];
+const SKIPPED_FOLDERS = new Set(["node_modules", "dist", "coverage"]);
 
 type FileKind = "block" | "kit" | "circuit" | "theme" | "page" | "board";
 
@@ -44,15 +45,28 @@ function isCompanion(file: string): boolean {
   return false;
 }
 
+/**
+ * A JSON Schema file describes manifests; it is not one, even when it is called
+ * block.json. A file that does not parse is kept, so check can report it.
+ */
+async function isJsonSchema(file: string): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(await readFile(file, "utf8")) as { $schema?: unknown };
+    return typeof parsed.$schema === "string" && /^https?:\/\/json-schema\.org\//.test(parsed.$schema);
+  } catch {
+    return false;
+  }
+}
+
 async function walkManifests(root: string): Promise<string[]> {
   const found: string[] = [];
   const entries = await readdir(root, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    if (SKIPPED_FOLDERS.has(entry.name) || entry.name.startsWith(".")) continue;
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
       found.push(...(await walkManifests(full)));
-    } else if (entry.isFile() && (MANIFEST_NAMES.includes(entry.name) || isCompanion(full))) {
+    } else if (entry.isFile() && (MANIFEST_NAMES.includes(entry.name) || isCompanion(full)) && !(await isJsonSchema(full))) {
       found.push(full);
     }
   }
