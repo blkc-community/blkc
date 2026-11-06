@@ -12,6 +12,8 @@ export interface OfficeHandle {
   setLayout(layout: OfficeLayout): void;
   /** Show or hide the lines between rooms whose code is linked. */
   setLinksVisible(on: boolean): void;
+  /** Show or hide what each road and building stands for. */
+  setPathsVisible(on: boolean): void;
   /** Pick an agent by id, or pass nothing to clear. */
   select(id?: string): void;
   /** The tile under a pointer event, allowing for the camera. */
@@ -102,6 +104,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
     const zoomed = scale * view.zoom;
     c.setTransform(zoomed, 0, 0, zoomed, -view.x * zoomed, -view.y * zoomed);
     c.imageSmoothingEnabled = false;
+    world.labelScale = zoomed || 1;
     drawWorld(c, world, time, palette, daylight, building, selected);
     overlay?.(c);
   };
@@ -243,6 +246,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
     select,
     tileAt,
     setOverlay(draw) { overlay = draw; },
+    setPathsVisible(on) { world.showPaths = on; if (still) paint(); },
     setLinksVisible(on) { world.showLinks = on; if (still) paint(); },
     setInteractive(on) { interactive = on; drag = undefined; if (!on) canvas.style.cursor = "crosshair"; },
     zoom,

@@ -66,6 +66,10 @@ export interface World {
   /** Worked out when first drawn, and again when the building changes. */
   routes?: LinkRoute[];
   showLinks: boolean;
+  /** Colour each road by its folder, and label roads and buildings with their real paths. */
+  showPaths: boolean;
+  /** Screen pixels for each world pixel right now, so labels can stay readable at any zoom. */
+  labelScale: number;
   cols: number;
   rows: number;
   rooms: Room[];
@@ -236,6 +240,8 @@ export function createWorld(scene: OfficeScene = {}): World {
   const world: World = {
     pack,
     showLinks: true,
+    showPaths: true,
+    labelScale: 1,
     ...buildLayout(scene, pack),
     agents: list<OfficeAgent>(scene?.agents, MAX_AGENTS).map(toAgent),
     tasks: list<OfficeTask>(scene?.tasks, MAX_TASKS).map(toTask),

@@ -132,6 +132,48 @@ describe("links between rooms", () => {
   });
 });
 
+describe("what the map stands for", () => {
+  const scene = {
+    cols: 30, rows: 16,
+    rooms: [
+      { id: "web", name: "Web", x: 4, y: 2, w: 10, h: 5, paths: ["apps/web/"] },
+      { id: "road", name: "apps/", x: 2, y: 8, w: 24, h: 2, floor: "hall" as const, paths: ["apps/"] },
+    ],
+    doors: [{ x: 6, y: 7 }],
+    furniture: [],
+  };
+  const textsDrawn = (world: World): string[] => {
+    const texts: string[] = [];
+    const { ctx } = recorder();
+    (ctx as unknown as { fillText: (text: string) => void }).fillText = (text) => { texts.push(text); };
+    drawWorld(ctx, world, 0, palette, daylightAt(12), undefined);
+    return texts;
+  };
+
+  it("labels roads and buildings with their real paths, and can be turned off", () => {
+    const world = createWorld(scene);
+    expect(textsDrawn(world)).toEqual(expect.arrayContaining(["apps/", "apps/web/"]));
+    world.showPaths = false;
+    const off = textsDrawn(world);
+    expect(off).not.toContain("apps/web/");
+    expect(off).toContain("APPS/");
+  });
+
+  it("keeps labels the same size on screen at any zoom", () => {
+    const fonts = (scale: number): string => {
+      const world = createWorld(scene);
+      world.labelScale = scale;
+      const seen: string[] = [];
+      const { ctx } = recorder();
+      const proxy = new Proxy(ctx, { set(target, name, value) { if (name === "font" && String(value).includes("11") || name === "font" && String(value).includes("5.5")) seen.push(String(value)); (target as never as Record<string, unknown>)[name as string] = value; return true; } });
+      drawWorld(proxy, world, 0, palette, daylightAt(12), undefined);
+      return seen.join();
+    };
+    expect(fonts(1)).toContain("11px");
+    expect(fonts(2)).toContain("5.5px");
+  });
+});
+
 describe("another world", () => {
   it("runs on the same engine, with its own items, words and painter", () => {
     const painted: string[] = [];

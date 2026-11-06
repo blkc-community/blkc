@@ -348,6 +348,46 @@ function drawWalls(c: Ctx, world: World, palette: Palette, daylight: Daylight): 
   }
 }
 
+const ROAD_TINTS = ["#38bdf8", "#f97316", "#a78bfa", "#34d399", "#f472b6", "#facc15", "#60a5fa", "#fb7185"];
+
+/** What the map stands for: each road tinted by its top folder, with real paths on roads and buildings. */
+function drawPaths(c: Ctx, world: World): void {
+  const size = 11 / world.labelScale;
+  const pad = 3 / world.labelScale;
+  const tag = (text: string, x: number, y: number, fill: string, ink: string): number => {
+    const width = c.measureText(text).width + pad * 2;
+    c.fillStyle = fill;
+    c.fillRect(x, y, width, size + pad * 2);
+    c.fillStyle = ink;
+    c.fillText(text, x + pad, y + pad);
+    return width;
+  };
+  const tops = [...new Set(world.rooms.filter((room) => room.floor === "hall" && room.paths[0]).map((room) => (room.paths[0] as string).split("/")[0]))].sort();
+  c.save();
+  c.font = `bold ${size}px ui-monospace, Menlo, Consolas, monospace`;
+  c.textBaseline = "top";
+  for (const room of world.rooms) {
+    if (room.floor !== "hall") continue;
+    const top = room.paths[0]?.split("/")[0];
+    c.globalAlpha = 0.3;
+    c.fillStyle = top ? (ROAD_TINTS[tops.indexOf(top) % ROAD_TINTS.length] as string) : "#cbd5e1";
+    c.fillRect(room.x * TILE, room.y * TILE, room.w * TILE, room.h * TILE);
+    c.globalAlpha = 1;
+  }
+  for (const room of world.rooms) {
+    if (room.floor !== "hall" || !room.name) continue;
+    tag(room.name, room.x * TILE + pad, (room.y + room.h / 2) * TILE - size / 2 - pad, "#0d0f22", "#ffffff");
+  }
+  for (const room of world.rooms) {
+    const where = room.paths[0];
+    if (room.floor === "hall" || !where) continue;
+    const width = c.measureText(where).width + pad * 2;
+    if (width > room.w * TILE) continue;
+    tag(where, room.x * TILE, (room.y + room.h) * TILE - size - pad * 2, "rgba(13,15,34,0.85)", "#dfe3ff");
+  }
+  c.restore();
+}
+
 function drawLabels(c: Ctx, world: World): void {
   c.font = LABEL_FONT;
   c.textBaseline = "top";
@@ -359,7 +399,7 @@ function drawLabels(c: Ctx, world: World): void {
     c.fillText(item.label, item.x * TILE + 19, item.y * TILE + 4.5);
   }
   for (const room of world.rooms) {
-    if (!room.name) continue;
+    if (!room.name || (world.showPaths && room.floor === "hall")) continue;
     const label = room.name.toUpperCase();
     const width = Math.ceil(c.measureText(label).width) + 6;
     const x = room.x * TILE + 3;
@@ -508,6 +548,7 @@ export function drawWorld(
 
   // On top, so tall furniture against a wall can't hide a room's name.
   drawLabels(c, world);
+  if (world.showPaths && world.rooms.some((room) => room.floor === "hall")) drawPaths(c, world);
   for (const agent of shown) nameTag(c, agent, agent.id === selected, width);
   for (const agent of shown) if (agent.id !== selected) drawStatus(c, agent, time);
   drawProgress(c, world, palette);

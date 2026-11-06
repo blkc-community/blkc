@@ -251,6 +251,7 @@ export function evolveRoads(previous: OfficeMap | undefined, tree: ProjectTree, 
   const changes: string[] = [];
   const top = asRoads(tree);
   const wanted = collectBuildings(top);
+  for (const id of map.removed ?? []) wanted.delete(id);
 
   const clearItems = (id: string): void => { map.furniture = map.furniture.filter((item) => item.room !== id); };
   for (const room of map.rooms) {

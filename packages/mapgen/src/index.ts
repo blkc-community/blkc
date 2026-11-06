@@ -53,6 +53,8 @@ export interface OfficeMap {
   world?: string;
   /** roads: grows from the project's folders, with no size limit. halls: even rows along corridors. Left out on the oldest maps. */
   layout?: "halls" | "roads";
+  /** Buildings the user took off the map. Their folders stay, and they stay off until restored or reset. */
+  removed?: string[];
   /** How tall the rooms are in the first pair of rows. */
   roomHeight?: number;
   seed: string;
