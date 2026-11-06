@@ -10,6 +10,8 @@ export interface OfficeHandle {
   update(scene: Pick<OfficeScene, "agents" | "tasks">): void;
   /** Change the building while everyone is in it. */
   setLayout(layout: OfficeLayout): void;
+  /** Show or hide the lines between rooms whose code is linked. */
+  setLinksVisible(on: boolean): void;
   /** Pick an agent by id, or pass nothing to clear. */
   select(id?: string): void;
   /** The tile under a pointer event, allowing for the camera. */
@@ -239,6 +241,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
     select,
     tileAt,
     setOverlay(draw) { overlay = draw; },
+    setLinksVisible(on) { world.showLinks = on; },
     setInteractive(on) { interactive = on; drag = undefined; if (!on) canvas.style.cursor = "crosshair"; },
     zoom,
     destroy() {

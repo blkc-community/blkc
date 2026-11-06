@@ -5,6 +5,7 @@
 
 import { registerWorld, worldData, type ItemSpec, type WorldData } from "./pack.js";
 import { OFFICE, OFFICE_ITEMS, OFFICE_LAYOUT } from "./worlds/office-data.js";
+import type { LinkRoute } from "./links.js";
 import type { AgentState, FloorStyle, FurnitureType, OfficeAgent, OfficeDoor, OfficeFurniture, OfficeLayout, OfficeRoom, OfficeScene, OfficeTask, TaskState } from "./types.js";
 
 export const MAX_COLS = 64;
@@ -58,6 +59,10 @@ export interface Agent {
 export interface World {
   /** What this world is made of. */
   pack: WorldData;
+  links: { from: string; to: string }[];
+  /** Worked out when first drawn, and again when the building changes. */
+  routes?: LinkRoute[];
+  showLinks: boolean;
   cols: number;
   rows: number;
   rooms: Room[];
@@ -156,7 +161,7 @@ registerWorld(OFFICE);
 /** A piece of furniture's spec. Only items in the world's list get into a World. */
 export const specOf = (world: Pick<World, "pack">, item: Item): ItemSpec => world.pack.items[item.type] as ItemSpec;
 
-function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "cols" | "rows" | "rooms" | "doors" | "furniture" | "walkable" | "spots" | "seats"> {
+function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "links" | "cols" | "rows" | "rooms" | "doors" | "furniture" | "walkable" | "spots" | "seats"> {
   const custom = Array.isArray(scene?.rooms) && scene.rooms.length > 0;
   const cols = Math.min(Math.max(int(scene?.cols, custom ? 20 : pack.layout.cols), 6), MAX_COLS);
   const rows = Math.min(Math.max(int(scene?.rows, custom ? 14 : pack.layout.rows), 6), MAX_ROWS);
@@ -213,7 +218,10 @@ function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "cols" |
     if (use === "lounge") spots.lounge.push(point);
     if (use === "board") spots.board.push(point);
   }
-  return { cols, rows, rooms, doors, furniture, walkable, seats, spots };
+  const links = list<{ from: string; to: string }>(scene?.links, 60)
+    .map((link) => ({ from: str(link?.from, 60), to: str(link?.to, 60) }))
+    .filter((link) => link.from && link.to);
+  return { cols, rows, rooms, doors, furniture, walkable, seats, spots, links };
 }
 
 /** Build a world from a scene. Bad values are dropped or clamped, so it never throws. */
@@ -221,6 +229,7 @@ export function createWorld(scene: OfficeScene = {}): World {
   const pack = worldData(scene?.world, OFFICE);
   const world: World = {
     pack,
+    showLinks: true,
     ...buildLayout(scene, pack),
     agents: list<OfficeAgent>(scene?.agents, MAX_AGENTS).map(toAgent),
     tasks: list<OfficeTask>(scene?.tasks, MAX_TASKS).map(toTask),
@@ -231,7 +240,7 @@ export function createWorld(scene: OfficeScene = {}): World {
 
 /** Change the building while everyone is in it. Anyone left inside a wall or a desk moves. */
 export function applyLayout(world: World, layout: OfficeLayout): void {
-  Object.assign(world, buildLayout(layout, world.pack));
+  Object.assign(world, buildLayout(layout, world.pack), { routes: undefined });
   for (const agent of world.agents) {
     agent.seat = undefined;
     agent.path = [];

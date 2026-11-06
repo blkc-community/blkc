@@ -4,6 +4,7 @@
  * and anything else that moves are drawn on top each frame (drawWorld).
  */
 
+import { drawLinks, linkRoutes } from "./links.js";
 import { BODY_FONT, LABEL_FONT, OUTLINE, TILE, rect, shade, type Ctx, type Palette } from "./paint.js";
 import { isSeated, specOf, type Agent, type Item, type Room, type World } from "./world.js";
 import { OFFICE_PAINTER } from "./worlds/office-paint.js";
@@ -462,6 +463,12 @@ export function drawWorld(
   const height = world.rows * TILE;
   if (building) c.drawImage(building, 0, 0, width, height);
   else drawBuilding(c, world, palette, daylight);
+
+  // On the floor, so people and furniture stay in front of the lines.
+  if (world.showLinks && world.links.length > 0) {
+    world.routes ??= linkRoutes(world);
+    drawLinks(c, world.routes, time);
+  }
 
   const painter = painterFor(world);
   const scene: { depth: number; draw: () => void }[] = [];
