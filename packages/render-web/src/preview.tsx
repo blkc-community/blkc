@@ -138,7 +138,12 @@ function KitPreview({ manifest, page }: { manifest: Row; page?: string }): React
     const result = renderBlock(instance);
     return (
       <React.Fragment key={index}>
-        {result.success ? result.element : <Note>{result.error}</Note>}
+        {result.success ? result.element : (
+          <Note>
+            {result.error}. If this Block comes with BLKC, your version may be older than this Kit.
+            Stop this preview and run: npx @blkc-code/cli@latest dev
+          </Note>
+        )}
       </React.Fragment>
     );
   });

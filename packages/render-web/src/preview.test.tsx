@@ -96,6 +96,7 @@ describe("renderManifestToHTML", () => {
   it("keeps drawing a page when one of its Blocks has no component", () => {
     const html = renderManifestToHTML(kit, { page: "custom" });
     expect(html).toContain("not-real");
+    expect(html).toContain("@blkc-code/cli@latest dev");
     expect(html).toContain("Still here");
   });
 
