@@ -215,13 +215,16 @@ describe("a monorepo", () => {
     expect(scan.areas.findIndex((a) => a.id === "packages-db")).toBeLessThan(scan.areas.findIndex((a) => a.id === "tooling"));
   });
 
-  it("gives linked rooms a door, and every link is reported", () => {
+  it("keeps linked rooms on one corridor, joins neighbours, and reports every link", () => {
     pkg("packages/ui", "@acme/ui");
     pkg("apps/web", "web", ["@acme/ui"]);
     pkg("apps/admin", "admin", ["@acme/ui"]);
     const { map } = evolveMap(undefined, scanProject(root), "acme");
     expect(map.links).toHaveLength(2);
-    expect(map.links?.every((link) => link.door)).toBe(true);
+    expect(map.links?.some((link) => link.door)).toBe(true);
+    const row = (id: string) => map.rooms.find((room) => room.id === id)?.y;
+    expect(row("apps-web")).toBe(row("packages-ui"));
+    expect(row("apps-admin")).toBe(row("packages-ui"));
     assertPlayable(map);
   });
 
@@ -266,19 +269,114 @@ describe("the office's maps don't change by accident", () => {
   const noLog = (map: OfficeMap): OfficeMap => ({ ...map, log: [] });
 
   it("a new project", () => {
-    expect(fingerprint(noLog(evolveMap(undefined, webapp, "acme", NOW).map))).toMatchInlineSnapshot(`"acedf7d0a6463c6d044e7273013177e9b2c31e43"`);
+    expect(fingerprint(noLog(evolveMap(undefined, webapp, "acme", NOW).map))).toMatchInlineSnapshot(`"bf3b0e93dca4e3544beddc62834a20824da4b511"`);
   });
 
   it("a project that grows and shrinks", () => {
     const first = evolveMap(undefined, webapp, "acme", NOW).map;
     const second = evolveMap(first, scanOf(["src/api", 400], ["src/ui", 80], ["docs", 15], ["infra", 30], ["public", 25]), "acme", NOW);
-    expect(fingerprint(second)).toMatchInlineSnapshot(`"29c2e0bb86811278ca890a96528e935fdf17b0a8"`);
+    expect(fingerprint(second)).toMatchInlineSnapshot(`"7476d66b8d69e36106f016a80f2436476120ff51"`);
   });
 
   it("many folders, and links", () => {
     const areas = Array.from({ length: 18 }, (_, i) => area(`packages/p${i}`, 5 + i * 3));
     const links = [{ from: "packages-p1", to: "packages-p0" }, { from: "packages-p2", to: "packages-p0" }];
-    expect(fingerprint(noLog(evolveMap(undefined, { rootFiles: 1, areas, links }, "big", NOW).map))).toMatchInlineSnapshot(`"f1e122f2556ec3d5c3c6180f16983ac71ed72b73"`);
+    expect(fingerprint(noLog(evolveMap(undefined, { rootFiles: 1, areas, links }, "big", NOW).map))).toMatchInlineSnapshot(`"f43aa84e266b7c9044a8f643e12d761c08aad4c4"`);
+  });
+});
+
+describe("the floor plan", () => {
+  const big = (n: number) => scanOf(...Array.from({ length: n }, (_, i) => [`packages/p${i}`, 5 + i * 9] as [string, number]));
+  const built = (map: OfficeMap) => map.rooms.filter((room) => room.role !== "hall");
+
+  it("puts every room on a corridor, in even rows, with a straight edge", () => {
+    for (const scan of [webapp, big(12), big(20)]) {
+      const { map } = evolveMap(undefined, scan, "plan");
+      expect(map.layout).toBe("halls");
+      const halls = map.rooms.filter((room) => room.id.startsWith("hall-"));
+      for (const room of built(map)) {
+        const onHall = halls.some((hall) => room.y + room.h + 1 === hall.y || hall.y + hall.h + 1 === room.y);
+        expect(onHall, room.id).toBe(true);
+        const door = map.doors.some((d) => d.x >= room.x && d.x < room.x + room.w && halls.some((hall) => (d.y === hall.y - 1 && d.y === room.y + room.h) || (d.y === hall.y + hall.h && d.y === room.y - 1)));
+        expect(door, `${room.id} has no door on the corridor`).toBe(true);
+      }
+      const rows = new Map<number, number>();
+      for (const room of built(map)) rows.set(room.y, Math.max(rows.get(room.y) ?? 0, room.x + room.w));
+      const ends = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, end]) => end);
+      expect(ends[0], "the top and bottom rows make a straight edge").toBe(ends[ends.length - 1]);
+      const halls2 = map.rooms.filter((room) => room.id.startsWith("hall-"));
+      for (const hall of halls2) expect(hall.x + hall.w, "corridors reach the edge").toBe(ends[0]);
+      assertPlayable(map);
+    }
+  });
+
+  it("uses every wall tile, with no space left between rooms in a row", () => {
+    const { map } = evolveMap(undefined, big(12), "plan");
+    const byRow = new Map<number, OfficeMap["rooms"]>();
+    for (const room of built(map)) byRow.set(room.y, [...(byRow.get(room.y) ?? []), room]);
+    for (const rooms of byRow.values()) {
+      const sorted = rooms.sort((a, b) => a.x - b.x);
+      sorted.slice(1).forEach((room, i) => expect(room.x - ((sorted[i] as OfficeMap["rooms"][number]).x + (sorted[i] as OfficeMap["rooms"][number]).w)).toBe(1));
+    }
+  });
+
+  it("opens a second corridor when the first is full, up to every folder the scan keeps", () => {
+    const { map } = evolveMap(undefined, big(20), "plan");
+    expect(map.rooms.some((room) => room.id === "stairs")).toBe(true);
+    expect(built(map).filter((room) => room.paths.length > 0 && room.paths[0] !== "").length).toBe(20);
+    assertPlayable(map);
+  });
+
+  it("moves a new folder into an empty room, and leaves everyone else where they are", () => {
+    const first = evolveMap(undefined, webapp, "plan").map;
+    const without = evolveMap(first, { ...webapp, areas: webapp.areas.filter((a) => a.id !== "docs") }, "plan");
+    const empty = without.map.rooms.find((room) => room.id === "docs");
+    expect(empty?.role).toBe("vacant");
+    const next = evolveMap(without.map, { ...webapp, areas: [...webapp.areas.filter((a) => a.id !== "docs"), area("billing", 30)] }, "plan");
+    const moved = next.map.rooms.find((room) => room.id === "billing");
+    expect(moved?.role).toBeUndefined();
+    expect(next.map.rooms.filter((room) => room.role === "vacant").length).toBeLessThan(without.map.rooms.filter((room) => room.role === "vacant").length + 1);
+    assertPlayable(next.map);
+  });
+
+  it("brings a folder back into its own old room", () => {
+    const first = evolveMap(undefined, webapp, "plan").map;
+    const gone = evolveMap(first, { ...webapp, areas: webapp.areas.filter((a) => a.id !== "docs") }, "plan").map;
+    const back = evolveMap(gone, webapp, "plan");
+    const room = back.map.rooms.find((candidate) => candidate.id === "docs");
+    expect(room?.role).toBeUndefined();
+    expect(room?.paths).toEqual(["docs/"]);
+    assertPlayable(back.map);
+  });
+
+  it("joins neighbours that depend on each other", () => {
+    const areas = [area("packages/ui", 20), area("apps/web", 40)];
+    const { map } = evolveMap(undefined, { rootFiles: 0, areas, links: [{ from: "apps-web", to: "packages-ui" }] }, "plan");
+    const link = map.links?.[0];
+    const web = map.rooms.find((room) => room.id === "apps-web");
+    const ui = map.rooms.find((room) => room.id === "packages-ui");
+    expect(web?.y).toBe(ui?.y);
+    expect(link?.door).toBe(true);
+    assertPlayable(map);
+  });
+
+  it("keeps growing an older map the way it was made", () => {
+    const old: OfficeMap = {
+      version: 1, seed: "old", evolve: true, cols: 40, rows: 24, log: [], furniture: [
+        { type: "coffee", x: 16, y: 5, room: "lounge" }, { type: "board", x: 16, y: 13, room: "quests" },
+      ],
+      rooms: [
+        { id: "lobby", name: "Lobby", x: 2, y: 3, w: 9, h: 6, floor: "stone", paths: [""], role: "lobby" },
+        { id: "lounge", name: "Lounge", x: 12, y: 3, w: 10, h: 6, floor: "carpet", paths: [], role: "lounge" },
+        { id: "quests", name: "Quests", x: 12, y: 10, w: 9, h: 6, floor: "tile", paths: [], role: "quests" },
+      ],
+      doors: [{ x: 11, y: 5 }, { x: 15, y: 9 }],
+    };
+    const { map } = evolveMap(old, webapp, "old");
+    expect(map.layout).toBeUndefined();
+    expect(map.rooms.some((room) => room.role === "hall")).toBe(false);
+    expect(map.rooms.find((room) => room.id === "src-api")).toBeDefined();
+    assertPlayable(map);
   });
 });
 
@@ -302,7 +400,7 @@ describe("another world", () => {
   it("grows its own rooms and furniture on the same engine", () => {
     const { map } = evolveMap(undefined, webapp, "acme", "now", kitchen);
     expect(map.world).toBe("test-kitchen");
-    expect(map.rooms.slice(0, 3).map((room) => room.name)).toEqual(["Back Door", "Yard", "The Pass"]);
+    expect(map.rooms.filter((room) => room.name).slice(0, 3).map((room) => room.name)).toEqual(["Back Door", "Yard", "The Pass"]);
     const types = new Set(map.furniture.map((item) => item.type));
     expect([...types].every((type) => type in kitchen.footprint)).toBe(true);
     expect(types.has("stove")).toBe(true);

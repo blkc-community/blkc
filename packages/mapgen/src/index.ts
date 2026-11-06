@@ -23,7 +23,7 @@ export interface MapRoom {
   h: number;
   floor: string;
   paths: string[];
-  /** lobby, lounge and quests are always there. vacant is a folder's room kept as a corridor. */
+  /** lobby, lounge and quests are always there. hall is a corridor. vacant is an empty room, free for the next folder. */
   role?: RoomRole;
   /** Edited by hand: the generator leaves it alone. */
   locked?: boolean;
@@ -35,6 +35,10 @@ export interface OfficeMap {
   version: 1;
   /** Which world this map is for. The office if left out. */
   world?: string;
+  /** halls: rooms in even rows along corridors. Left out on older maps, whose rooms were placed one against another. */
+  layout?: "halls";
+  /** How tall the rooms are in the first pair of rows. */
+  roomHeight?: number;
   seed: string;
   /** Follow the project as it changes. */
   evolve: boolean;
@@ -72,8 +76,9 @@ export interface ProjectScan {
 const MAX_COLS = 64;
 const MAX_ROWS = 40;
 const MAX_AREAS = 20;
-/** Past this many rooms, they stay small so that more of the project fits. */
-const COMPACT_ABOVE = 14;
+/** Past these many rooms, they stay small so that more of the project fits. */
+const COMPACT_ABOVE = 10;
+const TIGHT_ABOVE = 14;
 const MAX_ENTRIES = 200000;
 /** One huge folder can't use up the scan and leave the rest uncounted. */
 const MAX_ENTRIES_PER_AREA = 20000;
@@ -265,11 +270,11 @@ function themeFor(folder: string, plan: WorldPlan, random: () => number): Theme 
 }
 
 /** Room size follows the folder: slow growth, so a huge folder doesn't swallow the map. */
-function targetSize(id: string, files: number, seed: string, compact = false): { w: number; h: number } {
+function targetSize(id: string, files: number, seed: string, compact: false | number = false): { w: number; h: number } {
   const scale = Math.log2(Math.max(files, 1) + 1);
   const random = rng(`${seed}:size:${id}`);
   return {
-    w: Math.min(compact ? 10 : 14, Math.max(7, Math.round(6 + scale * 0.9 + random() * 2))),
+    w: Math.min(compact || 14, Math.max(7, Math.round(6 + scale * 0.9 + random() * 2))),
     h: Math.min(compact ? 6 : 9, Math.max(5, Math.round(4 + scale * 0.55 + random() * 2))),
   };
 }
@@ -346,6 +351,125 @@ function attach(
     }
   }
   return best && { box: best.box, door: best.door, host: best.host };
+}
+
+// --- Floor plans --------------------------------------------------------------------------------------
+//
+// A building: a corridor with a row of rooms on each side, sharing walls and with one door each.
+// When that's as wide as it can be, stairs lead to a second corridor below. Rows are squared off
+// with empty rooms, so the outline stays a rectangle, and the next new folder moves into one.
+
+const HALL_H = 2;
+const MIN_ROOM_W = 7;
+const SPARE_W = 9;
+const LOWER_ROOM_H = 6;
+/** The widest a corridor's rooms can reach, leaving space for stairs and the margins. */
+const MAX_ROW_END = MAX_COLS - MARGIN_X * 2 - 3;
+
+interface HallRow { hall: MapRoom; y: number; h: number; doorY: number; rooms: MapRoom[]; end: number; limit: number; edge?: number }
+
+const corridors = (map: OfficeMap): MapRoom[] =>
+  map.rooms.filter((room) => room.role === "hall" && room.id.startsWith("hall-")).sort((a, b) => a.y - b.y);
+
+const stairsOf = (map: OfficeMap): MapRoom | undefined => map.rooms.find((room) => room.id === "stairs");
+
+function hallRows(map: OfficeMap): HallRow[] {
+  const rows: HallRow[] = [];
+  const stairs = stairsOf(map);
+  corridors(map).forEach((hall, band, halls) => {
+    const h = band === 0 ? (map.roomHeight ?? LOWER_ROOM_H) : LOWER_ROOM_H;
+    for (const [y, doorY, faces] of [[hall.y - 1 - h, hall.y - 1, band], [hall.y + HALL_H + 1, hall.y + HALL_H, band === halls.length - 1 ? 0 : 1]] as const) {
+      // Rows between the corridors stop at the stairs. The outer ones run past them, for a straight edge.
+      const inner = stairs !== undefined && faces !== 0;
+      const edge = stairs ? (inner ? stairs.x - 1 : stairs.x + HALL_H) : undefined;
+      const rooms = map.rooms.filter((room) => room.role !== "hall" && room.y === y).sort((a, b) => a.x - b.x);
+      const last = rooms[rooms.length - 1];
+      rows.push({ hall, y, h, doorY, rooms, end: last ? last.x + last.w + 1 : hall.x, limit: edge ?? MAX_ROW_END, ...(edge === undefined ? {} : { edge }) });
+    }
+  });
+  return rows;
+}
+
+const doorInto = (x: number, w: number, y: number, random: () => number): MapDoor =>
+  ({ x: x + 1 + Math.floor(random() * Math.max(1, w - 2)), y });
+
+/** Where a new room goes: an empty room, or the end of a row, near what it's linked to. */
+function placeInHalls(
+  map: OfficeMap,
+  id: string,
+  width: number,
+  related: MapRoom[],
+  family: MapRoom[],
+  random: () => number,
+): { box: Box; door?: MapDoor; replaces?: MapRoom } | undefined {
+  const beside = (x: number, w: number, y: number, room: MapRoom): boolean => room.y === y && (room.x + room.w + 1 === x || x + w + 1 === room.x);
+  const empty = map.rooms
+    .filter((room) => room.role === "vacant" && !room.locked && room.w >= MIN_ROOM_W)
+    .map((room) => ({ room, score: Math.abs(room.w - width) - (related.some((other) => beside(room.x, room.w, room.y, other)) ? 20 : 0) - (family.some((other) => other.y === room.y) ? 4 : 0) }))
+    .sort((a, b) => a.score - b.score || a.room.x - b.room.x)[0]?.room;
+  if (empty) return { box: { x: empty.x, y: empty.y, w: empty.w, h: empty.h }, replaces: empty };
+
+  const stairs = stairsOf(map);
+  for (const w of [width, MIN_ROOM_W]) {
+    const open = hallRows(map).filter((row) => row.end + w <= row.limit);
+    const score = (row: HallRow): number => row.end
+      - (related.some((other) => other.y === row.y) ? 20 : 0)
+      - (family.some((other) => other.y === row.y) ? 6 : 0)
+      + random() * 3;
+    const row = open.map((candidate) => ({ candidate, value: score(candidate) })).sort((a, b) => a.value - b.value)[0]?.candidate;
+    if (row) return { box: { x: row.end, y: row.y, w, h: row.h }, door: doorInto(row.end, w, row.doorY, random) };
+  }
+
+  // This corridor is full. Stairs to a second one below.
+  const halls = corridors(map);
+  const top = halls[0];
+  if (!top || halls.length > 1 || stairs) return undefined;
+  const upperHeight = map.roomHeight ?? LOWER_ROOM_H;
+  const y = top.y + HALL_H + 1 + upperHeight + 1 + LOWER_ROOM_H + 1;
+  const span = bounds(map.rooms.filter((room) => room.role !== "hall"));
+  const landing = span.maxX + 1;
+  const total = y + HALL_H + 1 + LOWER_ROOM_H - (top.y - 1 - upperHeight);
+  if (landing + HALL_H > MAX_COLS - MARGIN_X * 2 || total + MARGIN_TOP + MARGIN_BOTTOM > MAX_ROWS) return undefined;
+  map.rooms.push({ id: "stairs", name: "", x: landing, y: top.y + HALL_H + 1, w: HALL_H, h: y - 1 - (top.y + HALL_H + 1), floor: "hall", paths: [], role: "hall" });
+  map.rooms.push({ id: "hall-1", name: "", x: top.x, y, w: landing + HALL_H - top.x, h: HALL_H, floor: "hall", paths: [], role: "hall" });
+  map.doors.push({ x: landing, y: top.y + HALL_H }, { x: landing, y: y - 1 });
+  return placeInHalls(map, id, width, related, family, random);
+}
+
+/** Corridors reach the end of their rows, and rows fill out to a straight edge with empty rooms. */
+function squareUp(map: OfficeMap, seed: string, touched: Set<string>): void {
+  const stairs = stairsOf(map);
+  const rows = hallRows(map);
+  const widest = Math.max(...rows.map((row) => row.end - 1), corridors(map)[0]?.x ?? 0);
+  for (const row of rows) {
+    let gap = (row.edge ?? widest) - row.end;
+    if (gap <= 0) continue;
+    const last = row.rooms[row.rooms.length - 1];
+    if (gap < MIN_ROOM_W + 1 && last && !last.locked && row.rooms.length > 0) {
+      last.w += gap + 1;
+      touched.add(last.id);
+      continue;
+    }
+    let x = row.end;
+    while (gap >= MIN_ROOM_W) {
+      const w = gap - SPARE_W - 1 >= MIN_ROOM_W ? SPARE_W : gap;
+      let n = 1;
+      while (map.rooms.some((room) => room.id === `spare-${n}`)) n += 1;
+      const id = `spare-${n}`;
+      map.rooms.push({ id, name: "Empty", x, y: row.y, w, h: row.h, floor: "concrete", paths: [], role: "vacant" });
+      map.doors.push(doorInto(x, w, row.doorY, rng(`${seed}:door:${id}`)));
+      touched.add(id);
+      x += w + 1;
+      gap -= w + 1;
+    }
+  }
+  for (const hall of corridors(map)) {
+    const w = (stairs ? stairs.x + HALL_H : widest) - hall.x;
+    if (w !== hall.w) {
+      hall.w = w;
+      touched.add(hall.id);
+    }
+  }
 }
 
 /** A door opens into a room only along a side of it, not at a corner. */
@@ -451,7 +575,7 @@ function furnish(room: MapRoom, doors: MapDoor[], seed: string, plan: WorldPlan)
   };
 
   if (room.role) {
-    for (const step of plan.furnishing[room.role]) {
+    for (const step of plan.furnishing[room.role] ?? []) {
       if ("wall" in step) wallItem(step.wall);
       else if ("scatter" in step) scatter(step.scatter);
       else if (step.at === "center") {
@@ -499,26 +623,23 @@ function normalize(map: OfficeMap): void {
 export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, seed: string, now = new Date().toISOString(), newWorld: WorldPlan = OFFICE_PLAN): { map: OfficeMap; changes: string[] } {
   const map: OfficeMap = previous
     ? (JSON.parse(JSON.stringify(previous)) as OfficeMap)
-    : { version: 1, ...(newWorld === OFFICE_PLAN ? {} : { world: newWorld.id }), seed, evolve: true, cols: 0, rows: 0, rooms: [], doors: [], furniture: [], log: [] };
+    : { version: 1, ...(newWorld === OFFICE_PLAN ? {} : { world: newWorld.id }), layout: "halls", roomHeight: scan.areas.length > 8 ? LOWER_ROOM_H : LOWER_ROOM_H + 1, seed, evolve: true, cols: 0, rows: 0, rooms: [], doors: [], furniture: [], log: [] };
   // A map stays the world it was made for.
   const plan = previous ? worldPlan(previous.world) : newWorld;
   const changes: string[] = [];
   const touched = new Set<string>();
 
   if (!previous) {
-    const [first, ...rest] = plan.specials;
-    if (!first) throw new Error(`The ${plan.id} world has no first room.`);
-    const lobby: MapRoom = { id: first.id, name: first.name, x: 0, y: 0, w: first.w, h: first.h, floor: first.floor, paths: [""], role: first.role };
-    map.rooms.push(lobby);
-    touched.add(lobby.id);
-    for (const special of rest) {
-      const spot = attach(special, map.rooms, [lobby], rng(`${map.seed}:place:${special.id}`));
-      if (!spot) continue;
-      map.rooms.push({ id: special.id, name: special.name, role: special.role, floor: special.floor, paths: [], ...spot.box });
-      map.doors.push(spot.door);
+    if (plan.specials.length === 0) throw new Error(`The ${plan.id} world has no first room.`);
+    map.rooms.push({ id: "hall-0", name: "", x: 0, y: 0, w: 1, h: HALL_H, floor: "hall", paths: [], role: "hall" });
+    // The first room faces the others across the corridor.
+    plan.specials.forEach((special, index) => {
+      const rows = hallRows(map);
+      const row = rows[index === 0 ? 1 : 0] as HallRow;
+      map.rooms.push({ id: special.id, name: special.name, role: special.role, floor: special.floor, paths: index === 0 ? [""] : [], x: row.end, y: row.y, w: special.w, h: row.h });
+      map.doors.push(doorInto(row.end, special.w, row.doorY, rng(`${map.seed}:place:${special.id}`)));
       touched.add(special.id);
-      touched.add(spot.host.id);
-    }
+    });
   }
 
   const wanted = new Map(scan.areas.map((area) => [area.id, area]));
@@ -530,13 +651,14 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     const keptDoors = map.doors.filter((door) => others.filter((other) => touches(other, door)).length >= 2);
     const start = others[0];
     const stillJoined = start ? reachable(others, keptDoors, start).size === others.length : true;
-    if (stillJoined) {
+    // In a floor plan an empty room stays, ready for the next folder.
+    if (stillJoined && map.layout !== "halls") {
       map.rooms = others;
       map.doors = keptDoors;
       map.furniture = map.furniture.filter((item) => item.room !== room.id);
       changes.push(`${room.name} closed: its folder has gone, or is no longer one of the main ones`);
     } else {
-      changes.push(`${room.name} is now empty: its folder has gone, and it stays as a way through`);
+      changes.push(map.layout === "halls" ? `${room.name} is now empty: its folder has gone, or is no longer one of the main ones` : `${room.name} is now empty: its folder has gone, and it stays as a way through`);
       room.role = "vacant";
       room.paths = [];
       room.name = `Old ${room.name}`.slice(0, 18);
@@ -546,7 +668,7 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
 
   // Folders that exist: update those we know, and add new ones. Biggest first, so if the map
   // ever runs out of space, it's the smallest folders that share the lobby.
-  const compact = scan.areas.length > COMPACT_ABOVE;
+  const compact = scan.areas.length > TIGHT_ABOVE ? 8 : scan.areas.length > COMPACT_ABOVE ? 10 : false;
   const links = scan.links ?? [];
   const isLinked = (area: ProjectArea): number => links.some((link) => link.from === area.id || link.to === area.id) ? 1 : 0;
   // Linked rooms go first, while there's still space beside what they depend on.
@@ -555,13 +677,21 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     const room = map.rooms.find((candidate) => candidate.id === area.id);
     if (room) {
       if (room.locked) continue;
+      if (room.role === "vacant") {
+        room.role = undefined;
+        room.name = area.name;
+        room.paths = [area.path];
+        touched.add(room.id);
+        changes.push(`${room.name} is back`);
+      }
       const beforeDesks = deskCount(room.files ?? 1);
       room.files = area.files;
       const target = targetSize(room.id, area.files, map.seed, compact);
       const others = map.rooms.filter((candidate) => candidate !== room);
       const doorStaysOutside = (box: Box): boolean => map.doors.every((door) => !(door.x >= box.x && door.x < box.x + box.w && door.y >= box.y && door.y < box.y + box.h));
       let grew = false;
-      for (const change of [{ w: target.w, h: room.h }, { w: room.w, h: target.h }] as const) {
+      // Rows keep one height, so a room in a floor plan only grows along its row.
+      for (const change of map.layout === "halls" ? [{ w: target.w, h: room.h }] : [{ w: target.w, h: room.h }, { w: room.w, h: target.h }] as const) {
         if (change.w <= room.w && change.h <= room.h) continue;
         const box = { x: room.x, y: room.y, w: Math.max(room.w, change.w), h: Math.max(room.h, change.h) };
         if (!others.some((other) => clashes(box, other)) && doorStaysOutside(box) && fits([...others, box])) {
@@ -585,6 +715,29 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     const related = map.rooms.filter((candidate) => partners.includes(candidate.id));
     const prefer = related.length > 0 ? related : family;
     const pull = related.length > 0 ? 40 : 8;
+    if (map.layout === "halls") {
+      const spot = placeInHalls(map, area.id, wantedSize.w, related, family, rng(`${map.seed}:place:${area.id}`));
+      if (!spot) continue; // the building is full; this folder's agents use the lobby
+      if (spot.replaces) {
+        const old = spot.replaces.id;
+        map.rooms = map.rooms.filter((candidate) => candidate !== spot.replaces);
+        map.furniture = map.furniture.filter((item) => item.room !== old);
+      }
+      if (spot.door) map.doors.push(spot.door);
+      const random = rng(`${map.seed}:theme:${area.id}`);
+      const added: MapRoom = { id: area.id, name: area.name, floor: themeFor(area.path, plan, random).floor, paths: [area.path], files: area.files, ...spot.box };
+      map.rooms.push(added);
+      touched.add(area.id);
+      // A door straight through to a neighbour it depends on.
+      for (const other of related) {
+        const wall = other.y !== added.y ? undefined : other.x + other.w + 1 === added.x ? added.x - 1 : added.x + added.w + 1 === other.x ? added.x + added.w : undefined;
+        if (wall === undefined || other.locked) continue;
+        map.doors.push({ x: wall, y: added.y + (added.h >> 1) });
+        touched.add(other.id);
+      }
+      if (previous) changes.push(`New room: ${area.name}`);
+      continue;
+    }
     const spot = attach(wantedSize, map.rooms, prefer, rng(`${map.seed}:place:${area.id}`), pull)
       ?? attach({ w: 7, h: 5 }, map.rooms, prefer, rng(`${map.seed}:place:${area.id}`), pull);
     if (!spot) continue; // the map is full; this folder's agents use the lobby
@@ -595,6 +748,8 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     touched.add(spot.host.id);
     if (previous) changes.push(`New room: ${area.name}`);
   }
+
+  if (map.layout === "halls") squareUp(map, map.seed, touched);
 
   // A new door or a bigger room can change what fits, so those rooms are furnished again.
   for (const id of touched) {

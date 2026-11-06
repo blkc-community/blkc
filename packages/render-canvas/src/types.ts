@@ -2,7 +2,7 @@
 
 export type AgentState = "working" | "thinking" | "blocked" | "reviewing" | "idle" | "done" | "away";
 export type TaskState = "todo" | "doing" | "done";
-export type FloorStyle = "wood" | "carpet" | "tile" | "stone" | "concrete" | "grass";
+export type FloorStyle = "wood" | "carpet" | "tile" | "stone" | "concrete" | "grass" | "hall";
 export type OfficeFurnitureType =
   | "desk" | "coffee" | "sofa" | "plant" | "fern" | "board" | "whiteboard" | "shelf" | "server" | "table" | "rug"
   | "water" | "arcade" | "fridge" | "printer" | "lamp" | "beanbag" | "tv" | "vending" | "clock" | "poster" | "trophy";

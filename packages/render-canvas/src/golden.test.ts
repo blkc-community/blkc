@@ -58,11 +58,11 @@ function frames(world: World, hour: number): string {
 
 describe("the office, drawn", () => {
   it("the default layout, by day", () => {
-    expect(frames(createWorld({ agents, tasks }), 12)).toMatchInlineSnapshot(`"ccad372798c9cb3d004a0b317e6234c7d588ce69"`);
+    expect(frames(createWorld({ agents, tasks }), 12)).toMatchInlineSnapshot(`"d9ce54efc4cdbce4231cee07e6e67f95fd4007ca"`);
   });
 
   it("the default layout, at night", () => {
-    expect(frames(createWorld({ agents, tasks }), 23)).toMatchInlineSnapshot(`"2f4d64a03ec657ab035c468bcbc3b78b892ccdbb"`);
+    expect(frames(createWorld({ agents, tasks }), 23)).toMatchInlineSnapshot(`"d32cdac765c22e9f5b5e6d034c6eaec855e58725"`);
   });
 
   it("every piece of furniture", () => {
@@ -75,7 +75,7 @@ describe("the office, drawn", () => {
     const world = createWorld({ agents, tasks });
     for (let i = 0; i < 20; i++) step(world, 0.2);
     applyUpdate(world, { agents: agents.map((agent) => ({ ...agent, state: "working" as const })), tasks: [] });
-    expect(frames(world, 8)).toMatchInlineSnapshot(`"6d2ea2b5651094415e1eea017c3936c710db1861"`);
+    expect(frames(world, 8)).toMatchInlineSnapshot(`"8e4be6ffc7caae4090b9d5f29c6f5b94b0334d50"`);
   });
 
   it("the layout's shape", () => {

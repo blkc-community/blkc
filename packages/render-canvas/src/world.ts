@@ -19,7 +19,7 @@ export const FURNITURE = OFFICE_ITEMS;
 
 const AGENT_STATES: readonly string[] = ["working", "thinking", "blocked", "reviewing", "idle", "done", "away"];
 const TASK_STATES: readonly string[] = ["todo", "doing", "done"];
-const FLOORS: readonly string[] = ["wood", "carpet", "tile", "stone", "concrete", "grass"];
+const FLOORS: readonly string[] = ["wood", "carpet", "tile", "stone", "concrete", "grass", "hall"];
 
 export const DEFAULT_LAYOUT = OFFICE_LAYOUT;
 
