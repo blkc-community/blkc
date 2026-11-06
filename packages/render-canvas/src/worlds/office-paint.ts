@@ -167,6 +167,14 @@ function drawFurniture(c: Ctx, item: Item, world: World, time: number, palette: 
       rect(c, "#1f2937", x + 12, y + 8, 4, 1);
       rect(c, "#3b82f6", x + 30, y + 10, 4, 1);
       break;
+    case "pile":
+      // A stack of boxes, for a group of loose files.
+      rect(c, "#14141f", x + 1, y + 5, 14, 10);
+      rect(c, "#b98b55", x + 2, y + 6, 12, 8);
+      rect(c, "#d3a874", x + 2, y + 6, 12, 2);
+      rect(c, "#14141f", x + 4, y + 1, 8, 5);
+      rect(c, "#d3a874", x + 5, y + 2, 6, 3);
+      break;
     case "rug":
       rect(c, palette.primary, x, y, 64, 48);
       c.fillStyle = "rgba(0,0,0,0.42)";

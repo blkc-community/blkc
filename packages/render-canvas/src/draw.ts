@@ -351,6 +351,13 @@ function drawWalls(c: Ctx, world: World, palette: Palette, daylight: Daylight): 
 function drawLabels(c: Ctx, world: World): void {
   c.font = LABEL_FONT;
   c.textBaseline = "top";
+  for (const item of world.furniture) {
+    if (!item.label) continue;
+    const width = Math.ceil(c.measureText(item.label).width) + 4;
+    rect(c, "#f4ecd8", item.x * TILE + 17, item.y * TILE + 3, width, 10);
+    c.fillStyle = "#1c1408";
+    c.fillText(item.label, item.x * TILE + 19, item.y * TILE + 4.5);
+  }
   for (const room of world.rooms) {
     if (!room.name) continue;
     const label = room.name.toUpperCase();
@@ -369,7 +376,7 @@ export function drawBuilding(c: Ctx, world: World, palette: Palette, daylight: D
   rect(c, WALL_TOP, 0, 0, world.cols * TILE, world.rows * TILE);
   for (const room of world.rooms) drawFloor(c, room);
   drawWalls(c, world, palette, daylight);
-  for (const item of world.furniture) if (item.type === "rug") painterFor(world).furniture(c, item, world, 0, palette);
+  for (const item of world.furniture) if (item.type === "rug" || item.type === "pile") painterFor(world).furniture(c, item, world, 0, palette);
   for (const item of world.furniture) if (specOf(world, item).wall) painterFor(world).furniture(c, item, world, 0, palette);
   // Light from the windows falling across the floor.
   if (daylight.sun !== "rgba(0,0,0,0)") {

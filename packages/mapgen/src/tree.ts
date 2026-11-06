@@ -247,8 +247,8 @@ export function scanTree(root: string, options: TreeOptions = {}): ProjectTree {
   const hasBuildings = (node: TreeNode): boolean => node.children.some((child) => child.kind === "building" || (child.kind === "road" && hasBuildings(child)));
   const topFiles = list("").filter((entry) => entry.isFile()).map((entry) => entry.name);
   let top = walk("", "", 0);
-  // A project that is one application, with none inside it, is one building.
-  if (!hasBuildings(top) && topFiles.some((file) => markers.some((marker) => marker.test(file)))) {
+  // With no application inside it, the whole project is one, marked or not.
+  if (!hasBuildings(top)) {
     secrets.length = 0;
     top = building("", "", topFiles);
   }

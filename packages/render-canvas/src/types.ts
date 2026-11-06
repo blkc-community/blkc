@@ -22,7 +22,7 @@ export interface OfficeRoom {
   paths?: string[];
 }
 export interface OfficeDoor { x: number; y: number }
-export interface OfficeFurniture { type: FurnitureType; x: number; y: number }
+export interface OfficeFurniture { type: FurnitureType; x: number; y: number; label?: string }
 export interface OfficeAgent {
   id: string;
   name?: string;

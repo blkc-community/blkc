@@ -8,10 +8,13 @@ import { OFFICE, OFFICE_ITEMS, OFFICE_LAYOUT } from "./worlds/office-data.js";
 import type { LinkRoute } from "./links.js";
 import type { AgentState, FloorStyle, FurnitureType, OfficeAgent, OfficeDoor, OfficeFurniture, OfficeLayout, OfficeRoom, OfficeScene, OfficeTask, TaskState } from "./types.js";
 
-export const MAX_COLS = 64;
-export const MAX_ROWS = 40;
+export const MAX_COLS = 1024;
+export const MAX_ROWS = 1024;
 const MAX_AGENTS = 40;
-const MAX_FURNITURE = 300;
+const MAX_FURNITURE = 60000;
+const MAX_ROOMS = 8000;
+const MAX_DOORS = 16000;
+const MAX_LINKS = 4000;
 const MAX_TASKS = 60;
 export const WALK_SPEED = 4.5; // tiles a second
 
@@ -29,7 +32,7 @@ const str = (value: unknown, max = 120): string => (typeof value === "string" ? 
 const list = <T>(value: unknown, max: number): T[] => (Array.isArray(value) ? (value.slice(0, max) as T[]) : []);
 
 export interface Room { id: string; name: string; x: number; y: number; w: number; h: number; floor: FloorStyle; paths: string[] }
-export interface Item { type: FurnitureType; x: number; y: number }
+export interface Item { type: FurnitureType; x: number; y: number; label?: string }
 export interface Task { title: string; state: TaskState; agent: string }
 
 export interface Agent {
@@ -165,8 +168,8 @@ function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "links" 
   const custom = Array.isArray(scene?.rooms) && scene.rooms.length > 0;
   const cols = Math.min(Math.max(int(scene?.cols, custom ? 20 : pack.layout.cols), 6), MAX_COLS);
   const rows = Math.min(Math.max(int(scene?.rows, custom ? 14 : pack.layout.rows), 6), MAX_ROWS);
-  const rawRooms = custom ? list<OfficeRoom>(scene.rooms, 40) : pack.layout.rooms;
-  const rawDoors = custom ? list<OfficeDoor>(scene.doors, 60) : pack.layout.doors;
+  const rawRooms = custom ? list<OfficeRoom>(scene.rooms, MAX_ROOMS) : pack.layout.rooms;
+  const rawDoors = custom ? list<OfficeDoor>(scene.doors, MAX_DOORS) : pack.layout.doors;
   const rawItems = Array.isArray(scene?.furniture) ? list<OfficeFurniture>(scene.furniture, MAX_FURNITURE) : custom ? [] : pack.layout.furniture;
 
   // Clamped to the grid: everything later loops over these, so a huge room must not hang the page.
@@ -175,7 +178,7 @@ function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "links" 
     const y = Math.min(Math.max(int(room?.y, 0), 0), rows);
     return {
       id: str(room?.id, 60) || `room-${index + 1}`,
-      name: str(room?.name, 24),
+      name: str(room?.name, 60),
       x, y,
       w: Math.min(Math.max(int(room?.w, 0), 0), cols - x),
       h: Math.min(Math.max(int(room?.h, 0), 0), rows - y),
@@ -195,7 +198,10 @@ function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "links" 
 
   const furniture: Item[] = rawItems
     .filter((item) => item && Object.hasOwn(pack.items, item.type))
-    .map((item) => ({ type: item.type, x: int(item.x, -99), y: int(item.y, -99) }));
+    .map((item) => {
+      const label = str(item.label, 40);
+      return { type: item.type, x: int(item.x, -99), y: int(item.y, -99), ...(label ? { label } : {}) };
+    });
   for (const item of furniture) {
     const spec = pack.items[item.type] as ItemSpec;
     if (spec.solid === false) continue;
@@ -218,7 +224,7 @@ function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "links" 
     if (use === "lounge") spots.lounge.push(point);
     if (use === "board") spots.board.push(point);
   }
-  const links = list<{ from: string; to: string }>(scene?.links, 60)
+  const links = list<{ from: string; to: string }>(scene?.links, MAX_LINKS)
     .map((link) => ({ from: str(link?.from, 60), to: str(link?.to, 60) }))
     .filter((link) => link.from && link.to);
   return { cols, rows, rooms, doors, furniture, walkable, seats, spots, links };

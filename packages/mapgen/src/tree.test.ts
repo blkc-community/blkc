@@ -68,6 +68,14 @@ describe("roads and buildings", () => {
     expect(find(top, "part:src/api")?.item).toBe("Server rack");
   });
 
+  it("treats a project with no marker at all as one application", () => {
+    write("src/api/a.ts");
+    write("notes.txt");
+    const { root: top } = scanTree(root);
+    expect(top.kind).toBe("building");
+    expect(find(top, "part:src/api")).toBeDefined();
+  });
+
   it("lets include and ignore change what's a building", () => {
     write("apps/web/package.json", "{}");
     write("apps/old/package.json", "{}");
