@@ -1,9 +1,10 @@
 import { describe, expect, it, afterEach, beforeEach } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createWorld, findPath } from "@blkc-code/render-canvas";
-import { evolveMap, roomForPath, scanProject, type OfficeMap, type ProjectScan } from "./index.js";
+import { OFFICE_PLAN, evolveMap, registerWorldPlan, roomForPath, scanProject, type OfficeMap, type ProjectScan, type WorldPlan } from "./index.js";
 
 const area = (rel: string, files: number) => ({ id: rel.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: rel.split("/").pop() as string, path: `${rel}/`, files });
 const scanOf = (...areas: [string, number][]): ProjectScan => ({ rootFiles: 3, areas: areas.map(([r, f]) => area(r, f)) });
@@ -256,5 +257,66 @@ describe("a monorepo", () => {
   it("gives a room the look of its own name, not its parent's", () => {
     const { map } = evolveMap(undefined, { areas: [{ id: "apps-api", name: "Api", path: "apps/api/", files: 5 }], rootFiles: 0 }, "x");
     expect(map.rooms.find((r) => r.id === "apps-api")?.floor).toBe("concrete");
+  });
+});
+
+describe("the office's maps don't change by accident", () => {
+  const NOW = "2026-01-01T00:00:00.000Z";
+  const fingerprint = (value: unknown): string => createHash("sha1").update(JSON.stringify(value)).digest("hex");
+  const noLog = (map: OfficeMap): OfficeMap => ({ ...map, log: [] });
+
+  it("a new project", () => {
+    expect(fingerprint(noLog(evolveMap(undefined, webapp, "acme", NOW).map))).toMatchInlineSnapshot(`"acedf7d0a6463c6d044e7273013177e9b2c31e43"`);
+  });
+
+  it("a project that grows and shrinks", () => {
+    const first = evolveMap(undefined, webapp, "acme", NOW).map;
+    const second = evolveMap(first, scanOf(["src/api", 400], ["src/ui", 80], ["docs", 15], ["infra", 30], ["public", 25]), "acme", NOW);
+    expect(fingerprint(second)).toMatchInlineSnapshot(`"29c2e0bb86811278ca890a96528e935fdf17b0a8"`);
+  });
+
+  it("many folders, and links", () => {
+    const areas = Array.from({ length: 18 }, (_, i) => area(`packages/p${i}`, 5 + i * 3));
+    const links = [{ from: "packages-p1", to: "packages-p0" }, { from: "packages-p2", to: "packages-p0" }];
+    expect(fingerprint(noLog(evolveMap(undefined, { rootFiles: 1, areas, links }, "big", NOW).map))).toMatchInlineSnapshot(`"f1e122f2556ec3d5c3c6180f16983ac71ed72b73"`);
+  });
+});
+
+describe("another world", () => {
+  const kitchen: WorldPlan = {
+    ...OFFICE_PLAN,
+    id: "test-kitchen",
+    footprint: { stove: { w: 2, h: 1, spot: [0, 1] }, crate: { w: 1, h: 1 }, pass: { w: 4, h: 1, spot: [1, 1] }, bench: { w: 2, h: 1, spot: [0, 1] } },
+    specials: [
+      { id: "door", name: "Back Door", role: "lobby", floor: "tile", w: 8, h: 5 },
+      { id: "yard", name: "Yard", role: "lounge", floor: "stone", w: 8, h: 5 },
+      { id: "pass", name: "The Pass", role: "quests", floor: "tile", w: 8, h: 5 },
+    ],
+    furnishing: { lobby: [{ scatter: "crate" }], lounge: [{ scatter: "bench" }], quests: [{ place: "pass", at: "top" }], vacant: [{ scatter: "crate" }] },
+    workstation: "stove",
+    themes: [],
+    fallback: { floor: "", floors: ["tile"], items: ["crate"], decor: [] },
+    filler: ["crate", "crate"],
+  };
+
+  it("grows its own rooms and furniture on the same engine", () => {
+    const { map } = evolveMap(undefined, webapp, "acme", "now", kitchen);
+    expect(map.world).toBe("test-kitchen");
+    expect(map.rooms.slice(0, 3).map((room) => room.name)).toEqual(["Back Door", "Yard", "The Pass"]);
+    const types = new Set(map.furniture.map((item) => item.type));
+    expect([...types].every((type) => type in kitchen.footprint)).toBe(true);
+    expect(types.has("stove")).toBe(true);
+  });
+
+  it("stays that world as the project changes", () => {
+    registerWorldPlan(kitchen);
+    const first = evolveMap(undefined, webapp, "acme", "now", kitchen).map;
+    const next = evolveMap(first, scanOf(["src/api", 900], ["src/ui", 80], ["brand-new", 40]), "acme", "now").map;
+    expect(next.world).toBe("test-kitchen");
+    expect(next.furniture.every((item) => item.type in kitchen.footprint)).toBe(true);
+  });
+
+  it("leaves an office map's file exactly as it was", () => {
+    expect("world" in evolveMap(undefined, webapp, "acme", "now").map).toBe(false);
   });
 });

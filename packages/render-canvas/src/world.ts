@@ -3,6 +3,8 @@
  * heading. Nothing in here touches a canvas, so all of it can be tested.
  */
 
+import { registerWorld, worldData, type ItemSpec, type WorldData } from "./pack.js";
+import { OFFICE, OFFICE_ITEMS, OFFICE_LAYOUT } from "./worlds/office-data.js";
 import type { AgentState, FloorStyle, FurnitureType, OfficeAgent, OfficeDoor, OfficeFurniture, OfficeLayout, OfficeRoom, OfficeScene, OfficeTask, TaskState } from "./types.js";
 
 export const MAX_COLS = 64;
@@ -12,54 +14,14 @@ const MAX_FURNITURE = 300;
 const MAX_TASKS = 60;
 export const WALK_SPEED = 4.5; // tiles a second
 
-/** Footprint in tiles, and where someone stands to use it, relative to its corner. */
-export const FURNITURE: Record<FurnitureType, { w: number; h: number; solid?: boolean; wall?: boolean; spot?: { x: number; y: number } }> = {
-  desk: { w: 3, h: 2, spot: { x: 1, y: 2 } },
-  coffee: { w: 2, h: 1, spot: { x: 0, y: 1 } },
-  water: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  sofa: { w: 3, h: 1, spot: { x: 1, y: 1 } },
-  plant: { w: 1, h: 1 },
-  fern: { w: 1, h: 1 },
-  board: { w: 4, h: 1, spot: { x: 1, y: 1 } },
-  whiteboard: { w: 3, h: 1, spot: { x: 1, y: 1 } },
-  shelf: { w: 2, h: 1, spot: { x: 0, y: 1 } },
-  server: { w: 1, h: 1 },
-  table: { w: 3, h: 2, spot: { x: 1, y: 2 } },
-  rug: { w: 4, h: 3, solid: false },
-  arcade: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  fridge: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  printer: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  lamp: { w: 1, h: 1 },
-  beanbag: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  tv: { w: 3, h: 1, spot: { x: 1, y: 2 } },
-  vending: { w: 1, h: 1, spot: { x: 0, y: 1 } },
-  trophy: { w: 1, h: 1 },
-  clock: { w: 1, h: 1, solid: false, wall: true },
-  poster: { w: 1, h: 1, solid: false, wall: true },
-};
+/** Footprints and uses, for the office. Other worlds bring their own. */
+export const FURNITURE = OFFICE_ITEMS;
 
 const AGENT_STATES: readonly string[] = ["working", "thinking", "blocked", "reviewing", "idle", "done", "away"];
 const TASK_STATES: readonly string[] = ["todo", "doing", "done"];
 const FLOORS: readonly string[] = ["wood", "carpet", "tile", "stone", "concrete", "grass"];
 
-export const DEFAULT_LAYOUT = {
-  cols: 26,
-  rows: 17,
-  rooms: [
-    { id: "studio", name: "Studio", x: 1, y: 3, w: 15, h: 13, floor: "wood" },
-    { id: "lounge", name: "Lounge", x: 17, y: 3, w: 8, h: 6, floor: "carpet" },
-    { id: "quests", name: "Quests", x: 17, y: 10, w: 8, h: 6, floor: "tile" },
-  ] as OfficeRoom[],
-  doors: [{ x: 16, y: 6 }, { x: 16, y: 13 }, { x: 23, y: 9 }] as OfficeDoor[],
-  furniture: [
-    { type: "desk", x: 2, y: 4 }, { type: "desk", x: 7, y: 4 }, { type: "desk", x: 12, y: 4 },
-    { type: "desk", x: 2, y: 10 }, { type: "desk", x: 7, y: 10 }, { type: "desk", x: 12, y: 10 },
-    { type: "plant", x: 1, y: 8 }, { type: "plant", x: 15, y: 8 }, { type: "server", x: 15, y: 15 }, { type: "server", x: 14, y: 15 },
-    { type: "shelf", x: 1, y: 15 },
-    { type: "coffee", x: 19, y: 3 }, { type: "water", x: 21, y: 3 }, { type: "sofa", x: 22, y: 3 }, { type: "rug", x: 20, y: 5 }, { type: "plant", x: 24, y: 8 },
-    { type: "board", x: 19, y: 10 }, { type: "table", x: 19, y: 13 }, { type: "plant", x: 24, y: 15 },
-  ] as OfficeFurniture[],
-};
+export const DEFAULT_LAYOUT = OFFICE_LAYOUT;
 
 const int = (value: unknown, fallback: number): number => (typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : fallback);
 const str = (value: unknown, max = 120): string => (typeof value === "string" ? value.slice(0, max) : "");
@@ -94,6 +56,8 @@ export interface Agent {
 }
 
 export interface World {
+  /** What this world is made of. */
+  pack: WorldData;
   cols: number;
   rows: number;
   rooms: Room[];
@@ -187,13 +151,18 @@ function toTask(raw: OfficeTask): Task {
   return { title: str(raw?.title, 80), state: TASK_STATES.includes(raw?.state as string) ? (raw.state as TaskState) : "todo", agent: str(raw?.agent, 60) };
 }
 
-function buildLayout(scene: OfficeLayout): Pick<World, "cols" | "rows" | "rooms" | "doors" | "furniture" | "walkable" | "spots" | "seats"> {
+registerWorld(OFFICE);
+
+/** A piece of furniture's spec. Only items in the world's list get into a World. */
+export const specOf = (world: Pick<World, "pack">, item: Item): ItemSpec => world.pack.items[item.type] as ItemSpec;
+
+function buildLayout(scene: OfficeLayout, pack: WorldData): Pick<World, "cols" | "rows" | "rooms" | "doors" | "furniture" | "walkable" | "spots" | "seats"> {
   const custom = Array.isArray(scene?.rooms) && scene.rooms.length > 0;
-  const cols = Math.min(Math.max(int(scene?.cols, custom ? 20 : DEFAULT_LAYOUT.cols), 6), MAX_COLS);
-  const rows = Math.min(Math.max(int(scene?.rows, custom ? 14 : DEFAULT_LAYOUT.rows), 6), MAX_ROWS);
-  const rawRooms = custom ? list<OfficeRoom>(scene.rooms, 40) : DEFAULT_LAYOUT.rooms;
-  const rawDoors = custom ? list<OfficeDoor>(scene.doors, 60) : DEFAULT_LAYOUT.doors;
-  const rawItems = Array.isArray(scene?.furniture) ? list<OfficeFurniture>(scene.furniture, MAX_FURNITURE) : custom ? [] : DEFAULT_LAYOUT.furniture;
+  const cols = Math.min(Math.max(int(scene?.cols, custom ? 20 : pack.layout.cols), 6), MAX_COLS);
+  const rows = Math.min(Math.max(int(scene?.rows, custom ? 14 : pack.layout.rows), 6), MAX_ROWS);
+  const rawRooms = custom ? list<OfficeRoom>(scene.rooms, 40) : pack.layout.rooms;
+  const rawDoors = custom ? list<OfficeDoor>(scene.doors, 60) : pack.layout.doors;
+  const rawItems = Array.isArray(scene?.furniture) ? list<OfficeFurniture>(scene.furniture, MAX_FURNITURE) : custom ? [] : pack.layout.furniture;
 
   // Clamped to the grid: everything later loops over these, so a huge room must not hang the page.
   const rooms: Room[] = rawRooms.map((room, index) => {
@@ -220,36 +189,39 @@ function buildLayout(scene: OfficeLayout): Pick<World, "cols" | "rows" | "rooms"
   for (const door of doors) mark(door.x, door.y, true);
 
   const furniture: Item[] = rawItems
-    .filter((item) => item && Object.hasOwn(FURNITURE, item.type))
+    .filter((item) => item && Object.hasOwn(pack.items, item.type))
     .map((item) => ({ type: item.type, x: int(item.x, -99), y: int(item.y, -99) }));
   for (const item of furniture) {
-    const spec = FURNITURE[item.type];
+    const spec = pack.items[item.type] as ItemSpec;
     if (spec.solid === false) continue;
     for (let y = item.y; y < item.y + spec.h; y++) for (let x = item.x; x < item.x + spec.w; x++) mark(x, y, false);
   }
 
   const open = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < cols && y < rows && walkable[y * cols + x] === true;
   const spot = (item: Item): { x: number; y: number } | undefined => {
-    const offset = FURNITURE[item.type].spot;
+    const offset = (pack.items[item.type] as ItemSpec).spot;
     if (!offset) return undefined;
     const point = { x: item.x + offset.x, y: item.y + offset.y };
     return open(point.x, point.y) ? point : undefined;
   };
-  const seats = furniture.filter((item) => item.type === "desk").map(spot).filter((p): p is { x: number; y: number } => Boolean(p));
+  const seats = furniture.filter((item) => (pack.items[item.type] as ItemSpec).use === "seat").map(spot).filter((p): p is { x: number; y: number } => Boolean(p));
   const spots: World["spots"] = { lounge: [], board: [] };
   for (const item of furniture) {
     const point = spot(item);
     if (!point) continue;
-    if (["coffee", "sofa", "water", "shelf", "arcade", "fridge", "beanbag", "vending", "tv"].includes(item.type)) spots.lounge.push(point);
-    if (["board", "table", "whiteboard"].includes(item.type)) spots.board.push(point);
+    const use = (pack.items[item.type] as ItemSpec).use;
+    if (use === "lounge") spots.lounge.push(point);
+    if (use === "board") spots.board.push(point);
   }
   return { cols, rows, rooms, doors, furniture, walkable, seats, spots };
 }
 
 /** Build a world from a scene. Bad values are dropped or clamped, so it never throws. */
 export function createWorld(scene: OfficeScene = {}): World {
+  const pack = worldData(scene?.world, OFFICE);
   const world: World = {
-    ...buildLayout(scene),
+    pack,
+    ...buildLayout(scene, pack),
     agents: list<OfficeAgent>(scene?.agents, MAX_AGENTS).map(toAgent),
     tasks: list<OfficeTask>(scene?.tasks, MAX_TASKS).map(toTask),
   };
@@ -259,7 +231,7 @@ export function createWorld(scene: OfficeScene = {}): World {
 
 /** Change the building while everyone is in it. Anyone left inside a wall or a desk moves. */
 export function applyLayout(world: World, layout: OfficeLayout): void {
-  Object.assign(world, buildLayout(layout));
+  Object.assign(world, buildLayout(layout, world.pack));
   for (const agent of world.agents) {
     agent.seat = undefined;
     agent.path = [];

@@ -13,6 +13,8 @@ import { createOffice, type OfficeHandle } from "./office.js";
 import type { OfficeScene } from "./types.js";
 
 export { createOffice } from "./office.js";
+export { registerPainter, type Painter } from "./draw.js";
+export { registerWorld, type ItemSpec, type WorldData } from "./pack.js";
 export type { OfficeHandle, OfficeOptions } from "./office.js";
 export * from "./types.js";
 export { FURNITURE, agentAt, applyLayout, applyUpdate, createWorld, findPath, step } from "./world.js";

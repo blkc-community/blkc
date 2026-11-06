@@ -20,10 +20,10 @@ Call office_leave when you finish the session.`;
 const reply = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 const failure = (error: unknown) => ({ isError: true, content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }] });
 
-function findQuest(tasks: Task[], quest: string): Task {
+function findQuest(tasks: Task[], quest: string, prefix: string): Task {
   const number = Number(quest);
   const found = Number.isInteger(number) && number >= 1 ? tasks[number - 1] : tasks.find((t) => t.title.toLowerCase() === quest.toLowerCase());
-  if (!found) throw new Error(`There is no quest "${quest}". Use office_view to see them.`);
+  if (!found) throw new Error(`There is no quest "${quest}". Use ${prefix}_view to see them.`);
   return found;
 }
 
@@ -32,13 +32,20 @@ export interface ServeOptions {
   version: string;
   /** Which area of the project a file belongs to, if the host knows. The path isn't kept. */
   areaForFile?: (file: string) => Promise<string | undefined>;
+  /** What the server and its tools are called: office_status, and so on. Change it for another product. */
+  prefix?: string;
+  /** What the agent is told this is. */
+  instructions?: string;
   /** Written to stderr once connected. stdout is the protocol. */
   banner?: string;
 }
 
 /** The MCP server for a store, not yet connected to anything. */
 export function createAgentServer(store: AgentStore, options: ServeOptions): McpServer {
-  const server = new McpServer({ name: "blkc-office", version: options.version }, { instructions: INSTRUCTIONS });
+  const prefix = options.prefix ?? "office";
+  const tool = (name: string): string => `${prefix}_${name}`;
+  const instructions = options.instructions ?? INSTRUCTIONS.split("office_").join(`${prefix}_`);
+  const server = new McpServer({ name: `blkc-${prefix}`, version: options.version }, { instructions });
 
   // An agent that doesn't give its own name appears as the app that launched this server.
   const self = (agent?: string): { id: string; name: string } => {
@@ -47,7 +54,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     return { id: slug(name) || "agent", name };
   };
 
-  server.registerTool("office_status", {
+  server.registerTool(tool("status"), {
     title: "Report your status",
     description: "Join the office if you are not in it, and say what you are doing. People walk to where their state sends them.",
     inputSchema: {
@@ -72,7 +79,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     }
   });
 
-  server.registerTool("office_leave", {
+  server.registerTool(tool("leave"), {
     title: "Leave the office",
     description: "Take yourself out of the office when your session ends.",
     inputSchema: { agent: z.string().max(24).optional() },
@@ -86,13 +93,13 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     }
   });
 
-  server.registerTool("office_view", {
+  server.registerTool(tool("view"), {
     title: "See the office",
     description: "See who is in the office and the quest board.",
     annotations: { readOnlyHint: true },
   }, async () => reply(await store.read()));
 
-  server.registerTool("office_next_quest", {
+  server.registerTool(tool("next_quest"), {
     title: "Pick up your next quest",
     description: "Get the next quest the user has for you, and start it: one assigned to you, or one nobody has taken. Quests added by other agents are not handed out here.",
     inputSchema: { agent: z.string().max(24).optional() },
@@ -113,7 +120,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     }
   });
 
-  server.registerTool("office_finish_quest", {
+  server.registerTool(tool("finish_quest"), {
     title: "Finish your quest",
     description: "Mark your current quest done. Name one by title or number if you have several.",
     inputSchema: { quest: z.string().max(80).optional(), agent: z.string().max(24).optional() },
@@ -122,8 +129,8 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
       const who = self(agent);
       let title = "";
       await store.update((office) => {
-        const found = quest ? findQuest(office.tasks, quest) : office.tasks.find((t) => t.state === "doing" && t.agent === who.id);
-        if (!found) throw new Error("You have no quest in progress. Use office_next_quest first.");
+        const found = quest ? findQuest(office.tasks, quest, prefix) : office.tasks.find((t) => t.state === "doing" && t.agent === who.id);
+        if (!found) throw new Error(`You have no quest in progress. Use ${prefix}_next_quest first.`);
         found.state = "done";
         title = found.title;
         setAgent(office, { ...who, state: "done", task: `Finished: ${found.title}` });
@@ -134,7 +141,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     }
   });
 
-  server.registerTool("office_add_quest", {
+  server.registerTool(tool("add_quest"), {
     title: "Add a quest",
     description: "Add a task to the quest board.",
     inputSchema: {
@@ -153,7 +160,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     }
   });
 
-  server.registerTool("office_update_quest", {
+  server.registerTool(tool("update_quest"), {
     title: "Update a quest",
     description: "Move a quest on the board, or give it to someone. Name it by its title or its number, starting at 1.",
     inputSchema: {
@@ -165,7 +172,7 @@ export function createAgentServer(store: AgentStore, options: ServeOptions): Mcp
     try {
       let title = quest;
       await store.update((office) => {
-        const found = findQuest(office.tasks, quest);
+        const found = findQuest(office.tasks, quest, prefix);
         title = found.title;
         if (state) found.state = state;
         if (agent) found.agent = slug(agent);

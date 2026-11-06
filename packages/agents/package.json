@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/agents",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "Track what agents are doing and hand them work, over MCP or from code",
   "main": "dist/index.js",
@@ -29,9 +29,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@blkc-code/core": "^0.2.1",
+    "@types/node": "^22.9.0",
     "typescript": "^5.9.3",
-    "vitest": "^5.1.0",
-    "@types/node": "^22.9.0"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.0.0"
