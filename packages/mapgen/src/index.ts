@@ -10,6 +10,9 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { OFFICE_PLAN, worldPlan, type RoomRole, type Theme, type WorldPlan } from "./plan.js";
+
+export * from "./plan.js";
 
 export interface MapRoom {
   id: string;
@@ -21,7 +24,7 @@ export interface MapRoom {
   floor: string;
   paths: string[];
   /** lobby, lounge and quests are always there. vacant is a folder's room kept as a corridor. */
-  role?: "lobby" | "lounge" | "quests" | "vacant";
+  role?: RoomRole;
   /** Edited by hand: the generator leaves it alone. */
   locked?: boolean;
   files?: number;
@@ -30,6 +33,8 @@ export interface MapItem { type: string; x: number; y: number; room?: string }
 export interface MapDoor { x: number; y: number }
 export interface OfficeMap {
   version: 1;
+  /** Which world this map is for. The office if left out. */
+  world?: string;
   seed: string;
   /** Follow the project as it changes. */
   evolve: boolean;
@@ -43,6 +48,9 @@ export interface OfficeMap {
   links?: MapLink[];
 }
 export interface MapLink { from: string; to: string; door: boolean }
+
+/** A map, for any world. */
+export type WorldMap = OfficeMap;
 
 export interface ProjectArea {
   id: string;
@@ -247,34 +255,14 @@ export function scanProject(root: string): ProjectScan {
 
 // --- What a folder looks like ---------------------------------------------------------------------------
 
-interface Theme { floor: string; items: string[]; decor: string[] }
-
-const THEMES: { match: RegExp; theme: Theme }[] = [
-  { match: /doc|guide|wiki|spec|readme|manual/, theme: { floor: "carpet", items: ["shelf", "shelf", "lamp"], decor: ["poster", "clock"] } },
-  { match: /test|spec|e2e|qa|fixture/, theme: { floor: "tile", items: ["whiteboard", "printer"], decor: ["clock", "poster"] } },
-  { match: /api|server|backend|service|worker|core|engine|kernel/, theme: { floor: "concrete", items: ["server", "server", "server", "printer"], decor: ["clock"] } },
-  { match: /db|data|migrat|schema|model|store|sql|supabase/, theme: { floor: "stone", items: ["server", "server", "shelf"], decor: ["clock"] } },
-  { match: /ui|web|front|client|component|page|view|style|site|app/, theme: { floor: "wood", items: ["fern", "lamp", "beanbag"], decor: ["poster", "poster"] } },
-  { match: /asset|public|image|media|static|font|icon/, theme: { floor: "grass", items: ["plant", "fern", "plant"], decor: [] } },
-  { match: /script|tool|ci|github|infra|deploy|ops|docker|bin/, theme: { floor: "stone", items: ["server", "printer", "whiteboard"], decor: ["clock"] } },
-  { match: /kit|block|circuit|plugin|ext|module|package/, theme: { floor: "carpet", items: ["whiteboard", "shelf"], decor: ["poster"] } },
-];
-const FALLBACK_FLOORS = ["wood", "carpet", "tile", "stone", "concrete"];
-
 /** The look comes from a folder's own name, so everything in apps/ doesn't look like a front end. */
-function themeFor(folder: string, random: () => number): Theme {
+function themeFor(folder: string, plan: WorldPlan, random: () => number): Theme {
   const own = folder.replace(/\/$/, "").split("/").pop() ?? folder;
-  const found = THEMES.find(({ match }) => match.test(own));
+  const found = plan.themes.find(({ match }) => match.test(own));
   if (found) return found.theme;
-  return { floor: FALLBACK_FLOORS[Math.floor(random() * FALLBACK_FLOORS.length)] as string, items: ["plant", "shelf", "lamp"], decor: ["poster"] };
+  const { floors, items, decor } = plan.fallback;
+  return { floor: floors[Math.floor(random() * floors.length)] as string, items, decor };
 }
-
-const FOOTPRINT: Record<string, { w: number; h: number; spot?: [number, number]; solid?: boolean }> = {
-  desk: { w: 3, h: 2, spot: [1, 2] }, coffee: { w: 2, h: 1, spot: [0, 1] }, water: { w: 1, h: 1, spot: [0, 1] }, sofa: { w: 3, h: 1, spot: [1, 1] },
-  plant: { w: 1, h: 1 }, fern: { w: 1, h: 1 }, board: { w: 4, h: 1, spot: [1, 1] }, whiteboard: { w: 3, h: 1, spot: [1, 1] }, shelf: { w: 2, h: 1, spot: [0, 1] },
-  server: { w: 1, h: 1 }, table: { w: 3, h: 2, spot: [1, 2] }, rug: { w: 4, h: 3, solid: false }, printer: { w: 1, h: 1, spot: [0, 1] }, lamp: { w: 1, h: 1 },
-  beanbag: { w: 1, h: 1, spot: [0, 1] }, vending: { w: 1, h: 1, spot: [0, 1] }, fridge: { w: 1, h: 1, spot: [0, 1] }, arcade: { w: 1, h: 1, spot: [0, 1] },
-};
 
 /** Room size follows the folder: slow growth, so a huge folder doesn't swallow the map. */
 function targetSize(id: string, files: number, seed: string, compact = false): { w: number; h: number } {
@@ -385,7 +373,7 @@ function reachable(rooms: Box[], doors: MapDoor[], from: Box): Set<Box> {
 
 // --- Furnishing ------------------------------------------------------------------------------------------
 
-function furnish(room: MapRoom, doors: MapDoor[], seed: string): MapItem[] {
+function furnish(room: MapRoom, doors: MapDoor[], seed: string, plan: WorldPlan): MapItem[] {
   const random = rng(`${seed}:furnish:${room.id}:${room.w}x${room.h}`);
   const blocked = new Set<string>();
   const reserved = new Set<string>();
@@ -420,7 +408,7 @@ function furnish(room: MapRoom, doors: MapDoor[], seed: string): MapItem[] {
 
   const items: MapItem[] = [];
   const place = (type: string, x: number, y: number): boolean => {
-    const spec = FOOTPRINT[type];
+    const spec = plan.footprint[type];
     if (!spec) return false;
     const cells: string[] = [];
     for (let dy = 0; dy < spec.h; dy++) {
@@ -443,7 +431,7 @@ function furnish(room: MapRoom, doors: MapDoor[], seed: string): MapItem[] {
     return true;
   };
   const scatter = (type: string, tries = 24): boolean => {
-    const spec = FOOTPRINT[type];
+    const spec = plan.footprint[type];
     if (!spec) return false;
     for (let i = 0; i < tries; i++) {
       const x = room.x + Math.floor(random() * Math.max(1, room.w - spec.w + 1));
@@ -462,37 +450,30 @@ function furnish(room: MapRoom, doors: MapDoor[], seed: string): MapItem[] {
     }
   };
 
-  if (room.role === "lobby") {
-    place("rug", room.x + Math.max(0, (room.w - 4) >> 1), room.y + Math.max(0, (room.h - 3) >> 1));
-    scatter("plant"); scatter("fern"); scatter("lamp"); wallItem("clock"); wallItem("poster");
-    return items;
-  }
-  if (room.role === "lounge") {
-    scatter("coffee"); scatter("water"); scatter("sofa"); scatter("fridge"); scatter("plant"); scatter("beanbag"); scatter("lamp"); wallItem("poster");
-    return items;
-  }
-  if (room.role === "quests") {
-    if (!place("board", room.x + 1, room.y)) scatter("board");
-    scatter("table"); scatter("whiteboard"); scatter("plant"); wallItem("clock");
-    return items;
-  }
-  if (room.role === "vacant") {
-    scatter("plant"); scatter("shelf");
+  if (room.role) {
+    for (const step of plan.furnishing[room.role]) {
+      if ("wall" in step) wallItem(step.wall);
+      else if ("scatter" in step) scatter(step.scatter);
+      else if (step.at === "center") {
+        const spec = plan.footprint[step.place];
+        if (spec) place(step.place, room.x + Math.max(0, (room.w - spec.w) >> 1), room.y + Math.max(0, (room.h - spec.h) >> 1));
+      } else if (!place(step.place, room.x + 1, room.y)) scatter(step.place);
+    }
     return items;
   }
 
-  const theme = themeFor(room.paths[0] ?? room.id, random);
+  const theme = themeFor(room.paths[0] ?? room.id, plan, random);
   let placed = 0;
   const wanted = deskCount(room.files ?? 1);
   const stepX = 4 + (random() < 0.3 ? 1 : 0);
   for (let y = room.y + 1; y + 2 < room.y + room.h && placed < wanted; y += 4) {
     for (let x = room.x + 1; x + 2 < room.x + room.w && placed < wanted; x += stepX) {
-      if (place("desk", x, y)) placed += 1;
+      if (place(plan.workstation, x, y)) placed += 1;
     }
   }
-  for (let i = placed; i < wanted; i++) if (scatter("desk")) placed += 1;
+  for (let i = placed; i < wanted; i++) if (scatter(plan.workstation)) placed += 1;
   for (const type of theme.items) scatter(type);
-  if (room.w * room.h > 70) scatter(random() < 0.5 ? "plant" : "fern");
+  if (room.w * room.h > 70) scatter(random() < 0.5 ? plan.filler[0] : plan.filler[1]);
   for (const type of theme.decor) wallItem(type);
   return items;
 }
@@ -515,18 +496,22 @@ function normalize(map: OfficeMap): void {
  * The map after the project's latest changes, or a new one. Returns what changed in words.
  * Pure: the same map, scan and seed always give the same result.
  */
-export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, seed: string, now = new Date().toISOString()): { map: OfficeMap; changes: string[] } {
+export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, seed: string, now = new Date().toISOString(), newWorld: WorldPlan = OFFICE_PLAN): { map: OfficeMap; changes: string[] } {
   const map: OfficeMap = previous
     ? (JSON.parse(JSON.stringify(previous)) as OfficeMap)
-    : { version: 1, seed, evolve: true, cols: 0, rows: 0, rooms: [], doors: [], furniture: [], log: [] };
+    : { version: 1, ...(newWorld === OFFICE_PLAN ? {} : { world: newWorld.id }), seed, evolve: true, cols: 0, rows: 0, rooms: [], doors: [], furniture: [], log: [] };
+  // A map stays the world it was made for.
+  const plan = previous ? worldPlan(previous.world) : newWorld;
   const changes: string[] = [];
   const touched = new Set<string>();
 
   if (!previous) {
-    const lobby: MapRoom = { id: "lobby", name: "Lobby", x: 0, y: 0, w: 9, h: 6, floor: "stone", paths: [""], role: "lobby" };
+    const [first, ...rest] = plan.specials;
+    if (!first) throw new Error(`The ${plan.id} world has no first room.`);
+    const lobby: MapRoom = { id: first.id, name: first.name, x: 0, y: 0, w: first.w, h: first.h, floor: first.floor, paths: [""], role: first.role };
     map.rooms.push(lobby);
     touched.add(lobby.id);
-    for (const special of [{ id: "lounge", name: "Lounge", role: "lounge", floor: "carpet", w: 10, h: 6 }, { id: "quests", name: "Quests", role: "quests", floor: "tile", w: 9, h: 6 }] as const) {
+    for (const special of rest) {
       const spot = attach(special, map.rooms, [lobby], rng(`${map.seed}:place:${special.id}`));
       if (!spot) continue;
       map.rooms.push({ id: special.id, name: special.name, role: special.role, floor: special.floor, paths: [], ...spot.box });
@@ -604,7 +589,7 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
       ?? attach({ w: 7, h: 5 }, map.rooms, prefer, rng(`${map.seed}:place:${area.id}`), pull);
     if (!spot) continue; // the map is full; this folder's agents use the lobby
     const random = rng(`${map.seed}:theme:${area.id}`);
-    map.rooms.push({ id: area.id, name: area.name, floor: themeFor(area.path, random).floor, paths: [area.path], files: area.files, ...spot.box });
+    map.rooms.push({ id: area.id, name: area.name, floor: themeFor(area.path, plan, random).floor, paths: [area.path], files: area.files, ...spot.box });
     map.doors.push(spot.door);
     touched.add(area.id);
     touched.add(spot.host.id);
@@ -616,7 +601,7 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     const room = map.rooms.find((candidate) => candidate.id === id);
     if (!room || room.locked) continue;
     map.furniture = map.furniture.filter((item) => item.room !== id);
-    map.furniture.push(...furnish(room, map.doors, map.seed));
+    map.furniture.push(...furnish(room, map.doors, map.seed, plan));
   }
 
   const onMap = (id: string): MapRoom | undefined => map.rooms.find((room) => room.id === id);

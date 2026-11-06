@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { BoardTemplateSchema } from "@blkc-code/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createAgentServer, createFileStore, diffEvents, nextTask, normalizeState, setAgent, type AgentStore, type AgentsState } from "./index.js";
+import { createAgentServer, TASK_BOARD, TASK_STATES, createFileStore, diffEvents, nextTask, normalizeState, setAgent, type AgentStore, type AgentsState } from "./index.js";
 
 let dir: string;
 beforeEach(async () => { dir = await mkdtemp(path.join(tmpdir(), "blkc-agents-")); });
@@ -102,6 +103,13 @@ describe("createFileStore", () => {
   });
 });
 
+describe("TASK_BOARD", () => {
+  it("is a valid board, with a column for every task state", () => {
+    expect(BoardTemplateSchema.safeParse(TASK_BOARD).success).toBe(true);
+    expect(TASK_BOARD.columns.map((column) => column.id)).toEqual([...TASK_STATES]);
+  });
+});
+
 describe("the MCP server", () => {
   /** Not a file: this is what a hosted product would supply. */
   function memoryStore(): AgentStore {
@@ -129,6 +137,18 @@ describe("the MCP server", () => {
     await client.callTool({ name: "office_status", arguments: { agent: "Ada", state: "working" } });
     const after = await store.read();
     expect(after.agents[0]).toMatchObject({ id: "ada", state: "working" });
+    await client.close();
+  });
+
+  it("can go by another name, for another product", async () => {
+    const server = createAgentServer(memoryStore(), { version: "0.0.0", prefix: "team" });
+    const client = new Client({ name: "test", version: "0.0.0" });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(a), client.connect(b)]);
+    const tools = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(tools).toContain("team_status");
+    expect(tools.some((tool) => tool.startsWith("office_"))).toBe(false);
+    expect(client.getInstructions()).toContain("team_next_quest");
     await client.close();
   });
 });

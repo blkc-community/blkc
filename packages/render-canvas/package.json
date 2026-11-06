@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/render-canvas",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Canvas renderer for BLKC: draws canvas Blocks such as the Pixel Office",
   "main": "dist/index.js",
@@ -34,7 +34,12 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "keywords": ["blkc", "canvas", "pixel-art", "renderer"],
+  "keywords": [
+    "blkc",
+    "canvas",
+    "pixel-art",
+    "renderer"
+  ],
   "author": "Black Code Enterprises LLC",
   "license": "Apache-2.0",
   "repository": {

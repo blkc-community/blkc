@@ -3,9 +3,12 @@
 export type AgentState = "working" | "thinking" | "blocked" | "reviewing" | "idle" | "done" | "away";
 export type TaskState = "todo" | "doing" | "done";
 export type FloorStyle = "wood" | "carpet" | "tile" | "stone" | "concrete" | "grass";
-export type FurnitureType =
+export type OfficeFurnitureType =
   | "desk" | "coffee" | "sofa" | "plant" | "fern" | "board" | "whiteboard" | "shelf" | "server" | "table" | "rug"
   | "water" | "arcade" | "fridge" | "printer" | "lamp" | "beanbag" | "tv" | "vending" | "clock" | "poster" | "trophy";
+
+/** An office item, or whatever else the world defines. */
+export type FurnitureType = OfficeFurnitureType | (string & {});
 
 export interface OfficeRoom {
   id?: string;
@@ -44,6 +47,8 @@ export interface OfficeLayout {
 }
 
 export interface OfficeScene extends OfficeLayout {
+  /** Which world to draw. The office if left out or unknown. */
+  world?: string;
   agents?: OfficeAgent[];
   tasks?: OfficeTask[];
 }

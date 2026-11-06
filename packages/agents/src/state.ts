@@ -8,6 +8,14 @@ export const TASK_STATES = ["todo", "doing", "done"] as const;
 export type AgentState = (typeof AGENT_STATES)[number];
 export type TaskState = (typeof TASK_STATES)[number];
 
+/** The tasks as a BLKC board, so a board product can show them as cards. */
+export const TASK_BOARD = {
+  id: "tasks",
+  name: "Tasks",
+  columns: [{ id: "todo", name: "To do" }, { id: "doing", name: "Doing" }, { id: "done", name: "Done" }],
+  transitions: [],
+} as const;
+
 export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string; area?: string }
 export interface Task {
   title: string;
