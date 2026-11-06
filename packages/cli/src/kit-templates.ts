@@ -537,6 +537,13 @@ test("every block on a page is declared by the Kit", () => {
 export const KIT_TEMPLATES: Record<string, Record<string, string>> = {
   "pixel-office": {
     "kit.json": JSON.stringify(pixelOfficeKit, null, 2) + "\n",
+    "world.json": JSON.stringify({
+      $schema: "https://blkc.blackcode.space/schemas/v2/world.json",
+      skin: "office",
+      applications: { markers: [] },
+      include: [],
+      ignore: [],
+    }, null, 2) + "\n",
     "kit.test.mjs": PIXEL_OFFICE_TEST,
     "README.md": PIXEL_OFFICE_README,
     NOTICE: PIXEL_OFFICE_NOTICE,

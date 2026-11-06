@@ -754,6 +754,39 @@ export const CircuitV2Schema = CircuitSchema.safeExtend({ manifestVersion: z.lit
 export type CircuitV2Manifest = z.infer<typeof CircuitV2Schema>;
 
 export const ThemeV2Schema = ThemeSchema;
+
+const ProjectPathSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^(?![\\/])(?!.*(^|[\\/])\.\.([\\/]|$)).+$/, "A path inside the project, with no .. and no leading slash");
+
+/**
+ * world.json, beside a Kit's kit.json: how a project becomes a world. It's data, so anyone
+ * can tailor it to their own stack without writing code.
+ */
+export const WorldConfigSchema = z
+  .object({
+    $schema: z.string().optional(),
+    /** Which skin to draw. Falls back to the office if it isn't installed. */
+    skin: IdentifierSchema.optional(),
+    applications: z
+      .object({
+        /** File names that mark a folder as an application, such as "go.mod" or "*.xydsf". */
+        markers: z.array(z.string().min(1).max(100).regex(/^[^\\/]+$/, "A file name, not a path")).max(50).default([]),
+        /** Use only these markers, not the built-in ones as well. */
+        replaceDefaults: z.boolean().default(false),
+      })
+      .strict()
+      .optional(),
+    /** Folders that get a building even with no marker, such as "docs". */
+    include: z.array(ProjectPathSchema).max(50).optional(),
+    /** Folders that never get a building. A folder name, or a path from the top of the project. */
+    ignore: z.array(ProjectPathSchema).max(100).optional(),
+  })
+  .strict();
+
+export type WorldConfig = z.infer<typeof WorldConfigSchema>;
 export type ThemeV2 = z.infer<typeof ThemeV2Schema>;
 
 export const PageV2Schema = KitPageSchema;

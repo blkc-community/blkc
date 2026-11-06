@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "skin": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9\\-]+$"
+    },
+    "applications": {
+      "type": "object",
+      "properties": {
+        "markers": {
+          "default": [],
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[^\\\\/]+$"
+          }
+        },
+        "replaceDefaults": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "include": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$)).+$"
+      }
+    },
+    "ignore": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$)).+$"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$id": "https://blkc.blackcode.space/schemas/v2/world.json"
+}

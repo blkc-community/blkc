@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discover } from "../commands/check.js";
+import { discover, validateOne } from "../commands/check.js";
 import { forgetServer, recordServer, runningServer, startDevServer } from "../commands/dev.js";
-import { areaForFile, findOfficeKits, projectRoot, resolveKit, writeMap } from "../office/state.js";
+import { areaForFile, evolveKitMap, findOfficeKits, projectRoot, readWorldConfig, resolveKit, writeMap } from "../office/state.js";
 
 let root: string;
 beforeEach(() => {
@@ -72,5 +72,26 @@ describe("one server per project", () => {
     expect(await runningServer(root)).toBeUndefined();
     await forgetServer(root);
     expect(await runningServer(root)).toBeUndefined();
+  });
+});
+
+describe("world.json", () => {
+  it("changes what becomes a building, and is checked like any manifest", async () => {
+    office("kits/office");
+    write("studio/alpha/a.xydsf");
+    write("studio/beta/b.xydsf");
+    write("kits/office/world.json", JSON.stringify({ applications: { markers: ["*.xydsf"] } }));
+    const { map } = await evolveKitMap(path.join(root, "kits/office"), root);
+    expect(map.rooms.map((r) => r.id)).toEqual(expect.arrayContaining(["studio-alpha", "studio-beta"]));
+    expect((await validateOne(path.join(root, "kits/office/world.json"))).ok).toBe(true);
+  });
+
+  it("reports a mistake, and the map carries on without it", async () => {
+    office("kits/office");
+    write("kits/office/world.json", JSON.stringify({ aplications: {} }));
+    expect((await validateOne(path.join(root, "kits/office/world.json"))).ok).toBe(false);
+    expect(readWorldConfig(path.join(root, "kits/office"))).toEqual({});
+    write("kits/office/world.json", JSON.stringify({ include: ["../secrets"] }));
+    expect((await validateOne(path.join(root, "kits/office/world.json"))).ok).toBe(false);
   });
 });

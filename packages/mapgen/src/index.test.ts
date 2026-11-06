@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach, beforeEach } from "vitest";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -209,10 +210,10 @@ describe("a monorepo", () => {
     pkg("apps/admin", "admin", ["@acme/ui"]);
     for (let i = 0; i < 300; i++) write(`_tooling/f${i}.md`);
     const scan = scanProject(root);
+    expect(scan.areas.some((a) => a.id === "tooling"), "no application, no building").toBe(false);
     expect(scan.links).toContainEqual({ from: "apps-web", to: "packages-ui" });
     expect(scan.areas.find((a) => a.id === "packages-ui")?.dependents).toBe(2);
     expect(scan.areas[0]?.id).toBe("packages-ui");
-    expect(scan.areas.findIndex((a) => a.id === "packages-db")).toBeLessThan(scan.areas.findIndex((a) => a.id === "tooling"));
   });
 
   it("keeps linked rooms on one corridor, joins neighbours, and reports every link", () => {
@@ -221,10 +222,9 @@ describe("a monorepo", () => {
     pkg("apps/admin", "admin", ["@acme/ui"]);
     const { map } = evolveMap(undefined, scanProject(root), "acme");
     expect(map.links).toHaveLength(2);
-    expect(map.links?.some((link) => link.door)).toBe(true);
     const row = (id: string) => map.rooms.find((room) => room.id === id)?.y;
-    expect(row("apps-web")).toBe(row("packages-ui"));
-    expect(row("apps-admin")).toBe(row("packages-ui"));
+    expect(row("apps-web"), "a street keeps to its row").toBe(row("apps-admin"));
+    expect(row("apps-web")).not.toBe(row("packages-ui"));
     assertPlayable(map);
   });
 
@@ -281,7 +281,113 @@ describe("the office's maps don't change by accident", () => {
   it("many folders, and links", () => {
     const areas = Array.from({ length: 18 }, (_, i) => area(`packages/p${i}`, 5 + i * 3));
     const links = [{ from: "packages-p1", to: "packages-p0" }, { from: "packages-p2", to: "packages-p0" }];
-    expect(fingerprint(noLog(evolveMap(undefined, { rootFiles: 1, areas, links }, "big", NOW).map))).toMatchInlineSnapshot(`"f43aa84e266b7c9044a8f643e12d761c08aad4c4"`);
+    expect(fingerprint(noLog(evolveMap(undefined, { rootFiles: 1, areas, links }, "big", NOW).map))).toMatchInlineSnapshot(`"dc0ca71de1be710a7feeb3bbebbbb825d174d64e"`);
+  });
+});
+
+describe("what counts as an application", () => {
+  let root: string;
+  beforeEach(() => { root = mkdtempSync(path.join(tmpdir(), "blkc-apps-")); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+  const write = (file: string, content = "x"): void => {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), content);
+  };
+  const paths = (options = {}) => scanProject(root, options).areas.map((a) => a.path).sort();
+
+  it("gives a building to applications only, in any language", () => {
+    write("apps/web/package.json", "{}");
+    write("services/api/go.mod");
+    write("tools/cli/Cargo.toml");
+    write("docs/guide.md");
+    write("loose.txt");
+    write("notes/ideas/a.md");
+    expect(paths()).toEqual(["apps/web/", "services/api/", "tools/cli/"]);
+  });
+
+  it("finds an application at any depth, and its folder path is the street", () => {
+    write("platform/backend/billing/pyproject.toml");
+    write("apps/web/package.json", "{}");
+    const scan = scanProject(root);
+    expect(scan.areas.find((a) => a.id === "platform-backend-billing")?.street).toBe("platform/backend/");
+    expect(scan.areas.find((a) => a.id === "apps-web")?.street).toBe("apps/");
+  });
+
+  it("doesn't look inside an application for more buildings", () => {
+    write("apps/web/package.json", "{}");
+    write("apps/web/vendor-tool/package.json", "{}");
+    write("apps/api/package.json", "{}");
+    expect(paths()).toEqual(["apps/api/", "apps/web/"]);
+  });
+
+  it("recognises a made-up application type from config", () => {
+    write("studio/alpha/project.xydsf");
+    write("studio/beta/other.xydsf");
+    write("studio/gamma/readme.md");
+    expect(paths()).not.toContain("studio/alpha/");
+    expect(paths({ markers: ["*.xydsf"] })).toEqual(["studio/alpha/", "studio/beta/"]);
+  });
+
+  it("can use only your own markers", () => {
+    write("a/package.json", "{}");
+    write("b/app.xydsf");
+    write("c/app.xydsf");
+    expect(paths({ markers: ["*.xydsf"], replaceDefaults: true })).toEqual(["b/", "c/"]);
+  });
+
+  it("treats a marker's dots literally", () => {
+    write("a/appxydsf");
+    write("b/app.xydsf");
+    write("c/app.xydsf");
+    expect(paths({ markers: ["*.xydsf"], replaceDefaults: true })).toEqual(["b/", "c/"]);
+  });
+
+  it("lets config add and remove buildings", () => {
+    write("apps/web/package.json", "{}");
+    write("apps/old/package.json", "{}");
+    write("apps/api/package.json", "{}");
+    write("docs/guide.md");
+    expect(paths({ include: ["docs"], ignore: ["apps/old"] })).toEqual(["apps/api/", "apps/web/", "docs/"]);
+    expect(paths({ ignore: ["old"] })).toEqual(["apps/api/", "apps/web/"]);
+  });
+
+  it("uses a single application's own folders as its rooms", () => {
+    write("package.json", "{}");
+    write("src/api/a.ts");
+    write("src/web/b.ts");
+    write("docs/c.md");
+    expect(paths()).toEqual(["docs/", "src/api/", "src/web/"]);
+  });
+
+  it("opens the only application when it isn't at the top", () => {
+    write("web/package.json", "{}");
+    write("web/src/a.ts");
+    write("web/lib/b.ts");
+    expect(paths()).toEqual(["web/lib/", "web/src/"]);
+  });
+
+  it("counts what git tracks, not build output", () => {
+    write("apps/web/package.json", "{}");
+    write("apps/web/src/a.ts");
+    write("apps/api/package.json", "{}");
+    write(".gitignore", "generated\n");
+    for (let i = 0; i < 50; i++) write(`apps/web/.next-build/f${i}.js`);
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["add", "apps/web/package.json", "apps/web/src/a.ts", "apps/api/package.json"], { cwd: root });
+    expect(scanProject(root).areas.find((a) => a.id === "apps-web")?.files).toBe(2);
+  });
+
+  it("names a corridor for the streets along it, and agents on a street stand in it", () => {
+    write("apps/web/package.json", "{}");
+    write("apps/api/package.json", "{}");
+    write("packages/ui/package.json", "{}");
+    const { map } = evolveMap(undefined, scanProject(root), "streets");
+    const hall = map.rooms.find((room) => room.id === "hall-0");
+    expect(hall?.name).toContain("apps/");
+    expect(hall?.name).toContain("packages/");
+    expect(roomForPath(map.rooms, "apps/not-an-app/a.ts")).toBe("hall-0");
+    expect(roomForPath(map.rooms, "apps/web/src/a.ts")).toBe("apps-web");
+    assertPlayable(map);
   });
 });
 
@@ -350,10 +456,10 @@ describe("the floor plan", () => {
   });
 
   it("joins neighbours that depend on each other", () => {
-    const areas = [area("packages/ui", 20), area("apps/web", 40)];
-    const { map } = evolveMap(undefined, { rootFiles: 0, areas, links: [{ from: "apps-web", to: "packages-ui" }] }, "plan");
+    const areas = [area("packages/ui", 20), area("packages/web", 40)];
+    const { map } = evolveMap(undefined, { rootFiles: 0, areas, links: [{ from: "packages-web", to: "packages-ui" }] }, "plan");
     const link = map.links?.[0];
-    const web = map.rooms.find((room) => room.id === "apps-web");
+    const web = map.rooms.find((room) => room.id === "packages-web");
     const ui = map.rooms.find((room) => room.id === "packages-ui");
     expect(web?.y).toBe(ui?.y);
     expect(link?.door).toBe(true);

@@ -8,6 +8,7 @@
  * here, never source code.
  */
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { OFFICE_PLAN, worldPlan, type RoomRole, type Theme, type WorldPlan } from "./plan.js";
@@ -63,7 +64,24 @@ export interface ProjectArea {
   files: number;
   /** How many other areas depend on this one. */
   dependents?: number;
+  /** The folder path it sits on, such as "apps/". */
+  street?: string;
 }
+
+/** How to read a project. This is the part of a Kit's world.json the scan needs. */
+export interface ScanOptions {
+  /** File names that mark a folder as an application, such as "go.mod" or "*.xydsf". */
+  markers?: string[];
+  /** Use only `markers`, not the built-in ones as well. */
+  replaceDefaults?: boolean;
+  /** Folders that get a building even with no marker. */
+  include?: string[];
+  /** Folders that never get a building: a name, or a path from the top. */
+  ignore?: string[];
+}
+
+/** What marks a folder as an application, out of the box. */
+export const DEFAULT_APP_MARKERS = ["package.json", "pyproject.toml", "setup.py", "requirements.txt", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "mix.exs", "deno.json", "pubspec.yaml", "Package.swift", "CMakeLists.txt", "*.csproj", "*.sln"];
 export interface ProjectScan {
   areas: ProjectArea[];
   rootFiles: number;
@@ -82,6 +100,11 @@ const TIGHT_ABOVE = 14;
 const MAX_ENTRIES = 200000;
 /** One huge folder can't use up the scan and leave the rest uncounted. */
 const MAX_ENTRIES_PER_AREA = 20000;
+/** How deep to look for applications. */
+const MAX_APP_DEPTH = 5;
+
+const markerMatcher = (marker: string): RegExp =>
+  new RegExp(`^${marker.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
 const MAX_DEPTH = 8;
 const IGNORE = new Set(["node_modules", ".git", "dist", "build", "out", "target", "coverage", ".next", ".turbo", ".cache", "vendor", "venv", "__pycache__", ".venv", ".idea", ".vscode", ".claude", ".blkc", ".gemini", ".cursor"]);
 const CONTAINERS = new Set(["src", "packages", "apps", "services", "libs", "lib", "modules", "crates", "cmd", "internal", "app"]);
@@ -179,8 +202,19 @@ function findLinks(root: string, areas: ProjectArea[]): { from: string; to: stri
 }
 
 /** Folder names, file counts and how the folders depend on each other. */
-export function scanProject(root: string): ProjectScan {
+export function scanProject(root: string, options: ScanOptions = {}): ProjectScan {
   const ignored = new Set([...IGNORE, ...gitignoredNames(root)]);
+  const clean = (value: string): string => value.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  const skipped = new Set((options.ignore ?? []).map(clean));
+  const isSkipped = (rel: string): boolean => skipped.has(rel) || skipped.has(path.posix.basename(rel));
+
+  // What git tracks is the truth. Build output on disk isn't part of the project.
+  let tracked: string[] | undefined;
+  try {
+    tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }).split("\0").filter(Boolean);
+  } catch {
+    // not a git repo, so the folders are all there is
+  }
 
   let budget = MAX_ENTRIES;
   const countFiles = (dir: string, depth: number): number => {
@@ -196,7 +230,7 @@ export function scanProject(root: string): ProjectScan {
       if (--budget <= 0) break;
       if (entry.isDirectory()) {
         const child = path.join(dir, entry.name);
-        if (!ignored.has(entry.name) && !isOwnRepo(child)) files += countFiles(child, depth + 1);
+        if (!ignored.has(entry.name) && !entry.name.startsWith(".") && !isOwnRepo(child)) files += countFiles(child, depth + 1);
       } else if (entry.isFile()) {
         files += 1;
       }
@@ -214,22 +248,60 @@ export function scanProject(root: string): ProjectScan {
     }
   };
 
+  const markers = [...(options.replaceDefaults ? [] : DEFAULT_APP_MARKERS), ...(options.markers ?? [])].map(markerMatcher);
+  const isApp = (dir: string): boolean => {
+    try {
+      return readdirSync(dir, { withFileTypes: true }).some((entry) => entry.isFile() && markers.some((marker) => marker.test(entry.name)));
+    } catch {
+      return false;
+    }
+  };
+  const below = (rel: string): string[] => subdirs(path.join(root, rel)).map((name) => (rel ? `${rel}/${name}` : name)).filter((child) => !isSkipped(child));
+
+  // An application is a building. A folder holding applications is a street. Everything else doesn't count.
+  const apps: string[] = [];
+  const findApps = (rel: string, depth: number): void => {
+    for (const child of below(rel)) {
+      if (isApp(path.join(root, child))) apps.push(child);
+      else if (depth < MAX_APP_DEPTH) findApps(child, depth + 1);
+    }
+  };
+  findApps("", 1);
+  const included = (options.include ?? []).map(clean).filter((rel) => !apps.includes(rel) && existsSync(path.join(root, rel)));
+
   const containers = new Set([...CONTAINERS, ...workspaceFolders(root)]);
   const areas: ProjectArea[] = [];
   let remaining = MAX_ENTRIES;
-  const add = (rel: string): void => {
-    budget = Math.min(MAX_ENTRIES_PER_AREA, remaining);
-    const before = budget;
-    const files = countFiles(path.join(root, rel), 0);
-    remaining -= before - Math.max(budget, 0);
-    if (files > 0) areas.push({ id: slug(rel), name: titled(path.basename(rel)), path: `${rel}/`, files });
+  const add = (rel: string, street?: string): void => {
+    let files = tracked ? tracked.filter((file) => file.startsWith(`${rel}/`)).length : 0;
+    if (files === 0) {
+      // New and not committed yet.
+      budget = Math.min(MAX_ENTRIES_PER_AREA, remaining);
+      const before = budget;
+      files = countFiles(path.join(root, rel), 0);
+      remaining -= before - Math.max(budget, 0);
+    }
+    if (files > 0) areas.push({ id: slug(rel), name: titled(path.basename(rel)), path: `${rel}/`, files, ...(street === undefined ? {} : { street }) });
   };
-  for (const name of subdirs(root)) {
-    const children = containers.has(name) ? subdirs(path.join(root, name)) : [];
-    // One package in packages/ is still a package, but one folder in src/ is just a folder.
-    const open = children.length >= 2 || children.some((child) => readPackage(path.join(root, name, child)));
-    if (open) for (const child of children) add(`${name}/${child}`);
-    else add(name);
+  const readsAsOneApp = apps.length + included.length <= 1 && (isApp(root) || apps.length === 0);
+  const insideOneApp = apps.length === 1 && included.length === 0 && !isApp(root);
+  if (readsAsOneApp || insideOneApp) {
+    // One application: its own folders are the rooms.
+    const base = insideOneApp ? (apps[0] as string) : "";
+    for (const rel of below(base)) {
+      const name = path.posix.basename(rel);
+      const children = containers.has(name) ? below(rel) : [];
+      // One package in packages/ is still a package, but one folder in src/ is just a folder.
+      const open = children.length >= 2 || children.some((child) => readPackage(path.join(root, child)));
+      if (open) for (const child of children) add(child);
+      else add(rel);
+    }
+    for (const rel of included) add(rel);
+  } else {
+    for (const rel of [...apps, ...included]) {
+      const parent = path.posix.dirname(rel);
+      add(rel, parent === "." ? "" : `${parent}/`);
+    }
   }
   let rootFiles = 0;
   try {
@@ -401,7 +473,12 @@ function placeInHalls(
   related: MapRoom[],
   family: MapRoom[],
   random: () => number,
+  street?: string,
 ): { box: Box; door?: MapDoor; replaces?: MapRoom } | undefined {
+  const streetOf = (room: MapRoom): string => {
+    const parent = path.posix.dirname((room.paths[0] ?? "").replace(/\/$/, ""));
+    return parent === "." ? "" : `${parent}/`;
+  };
   const beside = (x: number, w: number, y: number, room: MapRoom): boolean => room.y === y && (room.x + room.w + 1 === x || x + w + 1 === room.x);
   const empty = map.rooms
     .filter((room) => room.role === "vacant" && !room.locked && room.w >= MIN_ROOM_W)
@@ -414,7 +491,9 @@ function placeInHalls(
     const open = hallRows(map).filter((row) => row.end + w <= row.limit);
     const score = (row: HallRow): number => row.end
       - (related.some((other) => other.y === row.y) ? 20 : 0)
-      - (family.some((other) => other.y === row.y) ? 6 : 0)
+      - (family.some((other) => other.y === row.y) ? 30 : 0)
+      // A new street starts its own row, where it can.
+      + (street !== undefined && row.rooms.some((other) => !other.role && streetOf(other) !== street) ? 25 : 0)
       + random() * 3;
     const row = open.map((candidate) => ({ candidate, value: score(candidate) })).sort((a, b) => a.value - b.value)[0]?.candidate;
     if (row) return { box: { x: row.end, y: row.y, w, h: row.h }, door: doorInto(row.end, w, row.doorY, random) };
@@ -433,7 +512,7 @@ function placeInHalls(
   map.rooms.push({ id: "stairs", name: "", x: landing, y: top.y + HALL_H + 1, w: HALL_H, h: y - 1 - (top.y + HALL_H + 1), floor: "hall", paths: [], role: "hall" });
   map.rooms.push({ id: "hall-1", name: "", x: top.x, y, w: landing + HALL_H - top.x, h: HALL_H, floor: "hall", paths: [], role: "hall" });
   map.doors.push({ x: landing, y: top.y + HALL_H }, { x: landing, y: y - 1 });
-  return placeInHalls(map, id, width, related, family, random);
+  return placeInHalls(map, id, width, related, family, random, street);
 }
 
 /** Corridors reach the end of their rows, and rows fill out to a straight edge with empty rooms. */
@@ -716,7 +795,7 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     const prefer = related.length > 0 ? related : family;
     const pull = related.length > 0 ? 40 : 8;
     if (map.layout === "halls") {
-      const spot = placeInHalls(map, area.id, wantedSize.w, related, family, rng(`${map.seed}:place:${area.id}`));
+      const spot = placeInHalls(map, area.id, wantedSize.w, related, family, rng(`${map.seed}:place:${area.id}`), area.street);
       if (!spot) continue; // the building is full; this folder's agents use the lobby
       if (spot.replaces) {
         const old = spot.replaces.id;
@@ -749,7 +828,22 @@ export function evolveMap(previous: OfficeMap | undefined, scan: ProjectScan, se
     if (previous) changes.push(`New room: ${area.name}`);
   }
 
-  if (map.layout === "halls") squareUp(map, map.seed, touched);
+  if (map.layout === "halls") {
+    squareUp(map, map.seed, touched);
+    // A corridor is named for the literal paths along it.
+    const streetFor = new Map(scan.areas.map((area) => [area.id, area.street]));
+    for (const hall of corridors(map)) {
+      const streets = new Set<string>();
+      for (const row of hallRows(map).filter((candidate) => candidate.hall === hall)) {
+        for (const room of row.rooms) {
+          const street = streetFor.get(room.id);
+          if (street) streets.add(street);
+        }
+      }
+      hall.paths = [...streets];
+      hall.name = hall.paths.join(" + ").slice(0, 24);
+    }
+  }
 
   // A new door or a bigger room can change what fits, so those rooms are furnished again.
   for (const id of touched) {
