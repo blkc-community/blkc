@@ -88,6 +88,7 @@ export interface World {
   tasks: Task[];
   walkable: boolean[];
   spots: { lounge: { x: number; y: number }[]; board: { x: number; y: number }[] };
+  seats: { x: number; y: number }[];
 }
 
 export function hash(text: string): number {
@@ -214,6 +215,7 @@ export function createWorld(scene: OfficeScene = {}): World {
     agents: list<OfficeAgent>(scene?.agents, MAX_AGENTS).map(toAgent),
     tasks: list<OfficeTask>(scene?.tasks, MAX_TASKS).map(toTask),
     spots: { lounge: [], board: [] },
+    seats: [],
   };
 
   const spot = (item: Item): { x: number; y: number } | undefined => {
@@ -222,7 +224,7 @@ export function createWorld(scene: OfficeScene = {}): World {
     const point = { x: item.x + offset.x, y: item.y + offset.y };
     return isWalkable(world, point.x, point.y) ? point : undefined;
   };
-  const seats = furniture.filter((item) => item.type === "desk").map(spot).filter((p): p is { x: number; y: number } => Boolean(p));
+  world.seats = furniture.filter((item) => item.type === "desk").map(spot).filter((p): p is { x: number; y: number } => Boolean(p));
   for (const item of furniture) {
     const point = spot(item);
     if (!point) continue;
@@ -230,10 +232,7 @@ export function createWorld(scene: OfficeScene = {}): World {
     if (item.type === "board" || item.type === "table") world.spots.board.push(point);
   }
 
-  world.agents.forEach((agent, index) => {
-    agent.seat = seats[index];
-    placeAgent(world, agent);
-  });
+  for (const agent of world.agents) placeAgent(world, agent);
   return world;
 }
 
@@ -242,10 +241,49 @@ function firstWalkable(world: World): { x: number; y: number } {
   return { x: 0, y: 0 };
 }
 
-/** Where this agent's current state wants them to be. */
+const NEEDS_DESK: readonly AgentState[] = ["working", "thinking", "blocked"];
+
+/** Desks belong to whoever is working at one: claimed when an agent starts, freed when it stops. */
+function updateSeat(world: World, agent: Agent): void {
+  if (!NEEDS_DESK.includes(agent.state)) {
+    agent.seat = undefined;
+    return;
+  }
+  if (agent.seat) return;
+  const taken = new Set(world.agents.filter((other) => other !== agent && other.seat).map((other) => `${other.seat?.x},${other.seat?.y}`));
+  agent.seat = world.seats.find((seat) => !taken.has(`${seat.x},${seat.y}`));
+}
+
+/** Where an agent is standing, or heading to if it is walking. */
+function standing(agent: Agent): { x: number; y: number } {
+  const end = agent.path[agent.path.length - 1];
+  return end ?? { x: Math.round(agent.x), y: Math.round(agent.y) };
+}
+
+/** The closest tile to a spot that no other agent is on, so they don't stand inside each other. */
+function freeTileNear(world: World, agent: Agent, spot: { x: number; y: number }): { x: number; y: number } {
+  const others = new Set(world.agents.filter((other) => other !== agent && other.state !== "away").map((other) => {
+    const at = standing(other);
+    return `${at.x},${at.y}`;
+  }));
+  for (let radius = 0; radius <= 4; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) !== radius) continue;
+        const tile = { x: spot.x + dx, y: spot.y + dy };
+        if (isWalkable(world, tile.x, tile.y) && !others.has(`${tile.x},${tile.y}`) && findPath(world, spot, tile)) return tile;
+      }
+    }
+  }
+  return spot;
+}
+
+/** Where this agent's current state wants it to be. */
 export function goalFor(world: World, agent: Agent): { x: number; y: number } | undefined {
-  const pick = (spots: { x: number; y: number }[]): { x: number; y: number } | undefined =>
-    spots.length > 0 ? spots[(agent.seed + Math.floor(agent.rest * 1000)) % spots.length] : undefined;
+  const pick = (spots: { x: number; y: number }[]): { x: number; y: number } | undefined => {
+    const spot = spots.length > 0 ? spots[(agent.seed + Math.floor(agent.rest * 1000)) % spots.length] : undefined;
+    return spot && freeTileNear(world, agent, spot);
+  };
   switch (agent.state) {
     case "working":
     case "thinking":
@@ -262,6 +300,7 @@ export function goalFor(world: World, agent: Agent): { x: number; y: number } | 
 }
 
 function placeAgent(world: World, agent: Agent): void {
+  updateSeat(world, agent);
   const goal = goalFor(world, agent) ?? agent.seat ?? firstWalkable(world);
   agent.x = goal.x;
   agent.y = goal.y;
@@ -324,25 +363,36 @@ export function applyUpdate(world: World, scene: Pick<OfficeScene, "agents" | "t
   if (Array.isArray(scene.tasks)) world.tasks = list<OfficeTask>(scene.tasks, MAX_TASKS).map(toTask);
   if (!Array.isArray(scene.agents)) return;
   const existing = new Map(world.agents.map((agent) => [agent.id, agent]));
-  const seats = world.furniture
-    .filter((item) => item.type === "desk")
-    .map((item) => ({ x: item.x + 1, y: item.y + 2 }))
-    .filter((point) => isWalkable(world, point.x, point.y));
-  world.agents = list<OfficeAgent>(scene.agents, MAX_AGENTS).map((raw, index) => {
-    const next = toAgent(raw, index);
+  const incoming = list<OfficeAgent>(scene.agents, MAX_AGENTS).map(toAgent);
+  world.agents = incoming.map((next) => existing.get(next.id)).filter((agent): agent is Agent => Boolean(agent));
+  const updated = incoming.map((next) => {
     const current = existing.get(next.id);
-    next.seat = seats[index];
     if (!current) {
       placeAgent(world, next);
+      world.agents = [...world.agents, next];
+      // New arrivals come in through a door and walk to where they are going.
+      const door = world.doors[0];
+      const goal = { x: next.x, y: next.y };
+      if (door && next.state !== "away") {
+        next.x = door.x;
+        next.y = door.y;
+        routeTo(world, next, goal);
+      }
       return next;
     }
-    Object.assign(current, { name: next.name, role: next.role, task: next.task, hair: next.hair, skin: next.skin, shirt: next.shirt, seat: next.seat });
+    Object.assign(current, { name: next.name, role: next.role, task: next.task, hair: next.hair, skin: next.skin, shirt: next.shirt });
     if (current.state !== next.state) {
       current.state = next.state;
+      updateSeat(world, current);
       if (next.state !== "away") routeTo(world, current, goalFor(world, current));
+    } else if (NEEDS_DESK.includes(current.state) && !current.seat) {
+      // No desk was free before. One may be now.
+      updateSeat(world, current);
+      if (current.seat) routeTo(world, current, current.seat);
     }
     return current;
   });
+  world.agents = updated;
 }
 
 /** Agent under a point given in tiles, nearest first. */

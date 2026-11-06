@@ -22,7 +22,30 @@ shows any errors in the page. It previews every Block, Kit and Circuit in the fo
 
 ### Canvas Blocks
 
-The `office` Block draws a living pixel-art office in a canvas, from JSON. People walk, work and react to their status, and tasks become quests. See [Pixel Office](https://github.com/blkc-community/kits/tree/main/pixel-office) for how to change it. On your own page, render it with `@blkc-code/render-web`, then call `mountCanvasBlocks()` from `@blkc-code/render-canvas`. `registerCanvasBlock()` adds other kinds.
+The `office` Block draws a living pixel-art office in a canvas, from JSON. Agents walk, work and react to their status, and tasks become quests. See [Pixel Office](https://github.com/blkc-community/kits/tree/main/pixel-office) for how to change it. On your own page, render it with `@blkc-code/render-web`, then call `mountCanvasBlocks()` from `@blkc-code/render-canvas`. `registerCanvasBlock()` adds other kinds.
+
+### Run the office as an app
+
+`blkc dev` on a Kit with an `office` Block opens a full-screen app at `/office`. Add and edit agents, move quests on the board, and changes save to `office-state.json` beside the Kit. Moving a quest with an owner to Doing or Done updates that agent too.
+
+### Connect your agents
+
+Any agent on your machine can join. Nothing here is tied to one vendor:
+
+```bash
+npx @blkc-code/cli@latest office connect claude   # MCP, plus automatic updates through hooks
+npx @blkc-code/cli@latest office connect cursor   # or vscode, or gemini: MCP
+npx @blkc-code/cli@latest office connect codex    # prints the command to add the MCP server
+npx @blkc-code/cli@latest office connect other    # prints the settings for any other MCP agent
+```
+
+The MCP server, `blkc office mcp`, runs on your machine over stdio and offers `office_status`, `office_leave`, `office_view`, `office_add_quest` and `office_update_quest`. Agents report when they choose to, so ask yours to use them. Claude Code's hooks report by themselves, and record only the kind of action and a file's name, never commands, prompts or contents.
+
+Anything else can run a command:
+
+```bash
+npx @blkc-code/cli@latest office set "My Agent" working --task "Building the page"
+```
 
 ### Make something your own
 

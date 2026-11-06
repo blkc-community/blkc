@@ -22,7 +22,7 @@ describe("the default layout", () => {
   const world = createWorld(scene);
 
   it("connects every room and every spot someone can walk to", () => {
-    const seats = world.agents.map((agent) => agent.seat).filter(Boolean) as { x: number; y: number }[];
+    const seats = world.seats;
     expect(seats.length).toBe(6);
     const start = seats[0] as { x: number; y: number };
     for (const target of [...seats, ...world.spots.lounge, ...world.spots.board]) {
@@ -114,7 +114,55 @@ describe("applyUpdate", () => {
     expect({ x: ada.x, y: ada.y }).toEqual(start);
     expect(ada.path.length).toBeGreaterThan(0);
     run(world, 30);
-    expect(world.spots.board).toContainEqual({ x: ada.x, y: ada.y });
+    const near = world.spots.board.some((spot) => Math.abs(spot.x - ada.x) + Math.abs(spot.y - ada.y) <= 4);
+    expect(near).toBe(true);
+  });
+
+  it("lets people keep their desks when others leave, and walks newcomers in", () => {
+    const world = createWorld(scene);
+    const cy = world.agents[2]!;
+    const seat = { ...cy.seat! };
+    applyUpdate(world, { agents: [{ id: "cy", state: "blocked" }, { id: "newbie", state: "working" }] });
+    expect(world.agents[0]).toBe(cy);
+    expect(cy.seat).toEqual(seat);
+    expect(isSeated(cy)).toBe(true);
+    const newbie = world.agents[1]!;
+    expect(newbie.seat).toBeDefined();
+    expect(newbie.seat).not.toEqual(seat);
+    expect(newbie.path.length).toBeGreaterThan(0);
+    run(world, 30);
+    expect(isSeated(newbie)).toBe(true);
+  });
+
+  it("gives desks to agents that need them, and frees them when they stop", () => {
+    const world = createWorld({ agents: Array.from({ length: 6 }, (_, i) => ({ id: "idle-" + i, state: "idle" as const })) });
+    for (const agent of world.agents) expect(agent.seat).toBeUndefined();
+    applyUpdate(world, { agents: [{ id: "idle-0", state: "blocked" }, ...world.agents.slice(1).map((a) => ({ id: a.id, state: "idle" as const }))] });
+    const blocked = world.agents[0]!;
+    expect(blocked.seat).toBeDefined();
+    run(world, 30);
+    expect(isSeated(blocked)).toBe(true);
+    const seat = { ...blocked.seat! };
+    applyUpdate(world, { agents: [{ id: "idle-0", state: "idle" }, { id: "idle-1", state: "working" }] });
+    expect(world.agents[0]!.seat).toBeUndefined();
+    expect(world.agents[1]!.seat).toEqual(seat);
+  });
+
+  it("never gives two agents the same desk, and seats one when a desk frees up", () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ id: "busy-" + i, state: "working" as const }));
+    const world = createWorld({ agents: many });
+    const seats = world.agents.map((a) => a.seat).filter(Boolean).map((seat) => seat!.x + "," + seat!.y);
+    expect(seats.length).toBe(6);
+    expect(new Set(seats).size).toBe(6);
+    applyUpdate(world, { agents: many.slice(1) }); // busy-0 leaves
+    expect(world.agents.filter((a) => a.seat).length).toBe(6);
+  });
+
+  it("stands agents on separate tiles", () => {
+    const world = createWorld({ agents: Array.from({ length: 5 }, (_, i) => ({ id: "rest-" + i, state: "done" as const })) });
+    const tiles = world.agents.map((a) => a.x + "," + a.y);
+    expect(new Set(tiles).size).toBe(5);
+    for (const agent of world.agents) expect(isWalkable(world, agent.x, agent.y)).toBe(true);
   });
 
   it("adds, removes and updates tasks", () => {

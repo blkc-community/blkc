@@ -11,6 +11,7 @@
 
 import chalk from "chalk";
 import { Command } from "commander";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { FSWatcher, watch } from "node:fs";
@@ -21,17 +22,20 @@ import path from "node:path";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { URL } from "node:url";
 import { errorCodeDocsUrl, findErrorCode, parseAny, parseAnyCircuit, parseAnyKit } from "@blkc-code/core";
-import { kitPages } from "@blkc-code/render-web";
+import { kitPages, themeJsonToVariables } from "@blkc-code/render-web";
 import { renderManifestDocument } from "@blkc-code/render-web/server";
 import stylesheet from "@blkc-code/render-web/styles.css";
 import canvasRuntime from "@blkc-code/render-canvas/runtime.txt";
 import { discover, kindOf, validateOne, type CheckIssue } from "./check.js";
 import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
 import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
+import { OFFICE_HTML, OFFICE_JS } from "../office/app.js";
+import { MAX_STATE_BYTES, findOfficeBlock, findOfficeKits, normalizeState, readOfficeState, updateOfficeState } from "../office/state.js";
 
 const DEFAULT_PORT = 4173;
 const PORT_ATTEMPTS = 20;
 const IGNORED = new Set(["node_modules", ".git", "dist", ".next", "coverage"]);
+const IGNORED_FILES = /\.(lock|tmp)$/;
 
 type Kind = "block" | "kit" | "circuit";
 
@@ -177,6 +181,28 @@ const frameCsp = (nonce?: string): string =>
 const FRAME_CSP = frameCsp();
 const SHELL_CSP = "default-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'";
 
+/** The app can change files, so only this page may ask it to: a request from any other site carries its own Origin. */
+function isSameOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (origin === undefined) return false;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+async function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > limit) return undefined;
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 function send(res: ServerResponse, status: number, type: string, body: string, csp?: string): void {
   res.writeHead(status, {
     "Content-Type": `${type}; charset=utf-8`,
@@ -208,8 +234,57 @@ export async function startDevServer(root: string, port: number, exactPort: bool
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!isLocalHost(req)) return send(res, 403, "text/plain", "blkc dev only answers on localhost.");
-    if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "text/plain", "Method not allowed");
     const url = new URL(req.url ?? "/", "http://localhost");
+    const officeKit = async (): Promise<string | undefined> => {
+      const kits = await findOfficeKits(root);
+      const wanted = url.searchParams.get("item") ?? "";
+      // Looked up among what the scan found, never joined to a path from the URL.
+      return kits.find((dir) => (path.relative(process.cwd(), dir) || ".") === wanted);
+    };
+    if (url.pathname === "/api/office" && req.method === "PUT") {
+      if (!isSameOrigin(req)) return send(res, 403, "text/plain", "This only accepts changes from the office page.");
+      if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return send(res, 415, "text/plain", "Send JSON.");
+      const dir = await officeKit();
+      if (!dir) return send(res, 404, "text/plain", "No such office.");
+      const body = await readBody(req, MAX_STATE_BYTES);
+      if (body === undefined) return send(res, 413, "text/plain", "That is too large.");
+      let incoming;
+      try {
+        incoming = normalizeState(JSON.parse(body));
+      } catch {
+        return send(res, 400, "text/plain", "That is not valid JSON.");
+      }
+      const saved = await updateOfficeState(dir, (state) => {
+        state.agents = incoming.agents;
+        state.tasks = incoming.tasks;
+      });
+      return send(res, 200, "application/json", JSON.stringify(saved));
+    }
+    if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "text/plain", "Method not allowed");
+    if (url.pathname === "/office") return send(res, 200, "text/html", OFFICE_HTML, SHELL_CSP);
+    if (url.pathname === "/office.js") return send(res, 200, "text/javascript", OFFICE_JS);
+    if (url.pathname === "/canvas.js") return send(res, 200, "text/javascript", canvasRuntime);
+    if (url.pathname === "/api/office/kits") {
+      const kits = await findOfficeKits(root);
+      return send(res, 200, "application/json", JSON.stringify(kits.map((dir) => path.relative(process.cwd(), dir) || ".")));
+    }
+    if (url.pathname === "/api/office") {
+      const dir = await officeKit();
+      if (!dir) return send(res, 404, "text/plain", "No such office.");
+      const kit = JSON.parse(await readFile(path.join(dir, "kit.json"), "utf8")) as Json;
+      let theme = kit["theme"];
+      if (!theme) {
+        try {
+          theme = await readJson(path.join(dir, "theme.json"));
+        } catch {
+          // no theme: the office has its own colours
+        }
+      }
+      const props = findOfficeBlock(dir) ?? {};
+      const scene = { cols: props["cols"], rows: props["rows"], rooms: props["rooms"], doors: props["doors"], furniture: props["furniture"] };
+      const vars = themeJsonToVariables(theme as never);
+      return send(res, 200, "application/json", JSON.stringify({ name: kit["name"], scene, vars, ...(await readOfficeState(dir)) }));
+    }
 
     if (url.pathname === "/") return send(res, 200, "text/html", SHELL_HTML, SHELL_CSP);
     if (url.pathname === "/favicon.ico") {
@@ -279,7 +354,7 @@ export async function startDevServer(root: string, port: number, exactPort: bool
     }, 80);
   };
   const watcher: FSWatcher = watch(root, { recursive: true }, (_event, name) => {
-    if (name && String(name).split(path.sep).some((part) => IGNORED.has(part))) return;
+    if (name && (String(name).split(path.sep).some((part) => IGNORED.has(part)) || IGNORED_FILES.test(String(name)))) return;
     notify();
   });
   watcher.on("error", (error) => console.error(chalk.yellow(`Could not watch for changes: ${error.message}`)));
@@ -356,9 +431,11 @@ export function registerDevCommand(program: Command): void {
       }
 
       const url = `http://localhost:${dev.port}`;
+      const hasOffice = (await findOfficeKits(root)).length > 0;
       console.log(`${chalk.green("BLKC dev")}  ${url}`);
       console.log(chalk.gray("Watching for changes. Press Ctrl+C to stop."));
-      if (options.open) openBrowser(url);
+      if (hasOffice) console.log(`${chalk.green("Office app")}  ${url}/office`);
+      if (options.open) openBrowser(hasOffice ? `${url}/office` : url);
       const stop = (): void => {
         dev.close();
         process.exit(0);
