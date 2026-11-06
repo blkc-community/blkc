@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { discover, validateOne } from "../commands/check.js";
 import { forgetServer, recordServer, runningServer, startDevServer } from "../commands/dev.js";
-import { areaForFile, evolveKitMap, findOfficeKits, projectRoot, readWorldConfig, resolveKit, writeMap } from "../office/state.js";
+import { areaForFile, evolveKitMap, findOfficeKits, projectRoot, readTreeOptions, readWorldConfig, resolveKit, writeMap } from "../office/state.js";
 
 let root: string;
 beforeEach(() => {
@@ -93,5 +93,17 @@ describe("world.json", () => {
     expect(readWorldConfig(path.join(root, "kits/office"))).toEqual({});
     write("kits/office/world.json", JSON.stringify({ include: ["../secrets"] }));
     expect((await validateOne(path.join(root, "kits/office/world.json"))).ok).toBe(false);
+  });
+});
+
+describe("readTreeOptions", () => {
+  it("reads world.json, and never makes the office's own Kit a building", () => {
+    office("kits/office");
+    write("kits/office/world.json", JSON.stringify({ roads: ["external/"], fileGroups: { Studio: ["*.xydsf"] }, partTypes: { Vending: ["weird"] } }));
+    const options = readTreeOptions(path.join(root, "kits/office"), root);
+    expect(options.roads).toEqual(["external/"]);
+    expect(options.fileGroups).toEqual({ Studio: ["*.xydsf"] });
+    expect(options.ignore).toContain("kits/office");
+    expect(readTreeOptions(undefined, root)).toEqual({});
   });
 });

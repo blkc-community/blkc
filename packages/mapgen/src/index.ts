@@ -11,9 +11,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { DEFAULT_APP_MARKERS, IGNORE, gitignoredNames, isOwnRepo, markerMatcher, readPackage } from "./project-files.js";
 import { OFFICE_PLAN, worldPlan, type RoomRole, type Theme, type WorldPlan } from "./plan.js";
 
 export * from "./plan.js";
+export * from "./project-files.js";
+export * from "./tree.js";
 
 export interface MapRoom {
   id: string;
@@ -80,8 +83,6 @@ export interface ScanOptions {
   ignore?: string[];
 }
 
-/** What marks a folder as an application, out of the box. */
-export const DEFAULT_APP_MARKERS = ["package.json", "pyproject.toml", "setup.py", "requirements.txt", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "mix.exs", "deno.json", "pubspec.yaml", "Package.swift", "CMakeLists.txt", "*.csproj", "*.sln"];
 export interface ProjectScan {
   areas: ProjectArea[];
   rootFiles: number;
@@ -103,10 +104,7 @@ const MAX_ENTRIES_PER_AREA = 20000;
 /** How deep to look for applications. */
 const MAX_APP_DEPTH = 5;
 
-const markerMatcher = (marker: string): RegExp =>
-  new RegExp(`^${marker.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
 const MAX_DEPTH = 8;
-const IGNORE = new Set(["node_modules", ".git", "dist", "build", "out", "target", "coverage", ".next", ".turbo", ".cache", "vendor", "venv", "__pycache__", ".venv", ".idea", ".vscode", ".claude", ".blkc", ".gemini", ".cursor"]);
 const CONTAINERS = new Set(["src", "packages", "apps", "services", "libs", "lib", "modules", "crates", "cmd", "internal", "app"]);
 
 const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -131,32 +129,7 @@ function rng(seed: string): () => number {
   };
 }
 
-/** The plain folder names in a .gitignore. Patterns with wildcards aren't followed. */
-export function gitignoredNames(root: string): Set<string> {
-  const names = new Set<string>();
-  try {
-    for (const line of readFileSync(path.join(root, ".gitignore"), "utf8").split("\n")) {
-      const name = line.trim().replace(/^\//, "").replace(/\/$/, "");
-      if (name && !/[*!#/\s]/.test(name)) names.add(name);
-    }
-  } catch {
-    // no .gitignore
-  }
-  return names;
-}
-
-/** A folder with its own .git is another project, even if it sits inside this one. */
-export const isOwnRepo = (dir: string): boolean => existsSync(path.join(dir, ".git"));
-
 type Json = Record<string, unknown>;
-
-const readPackage = (dir: string): Json | undefined => {
-  try {
-    return JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as Json;
-  } catch {
-    return undefined;
-  }
-};
 
 /** Top-level folders a workspace config says hold packages, such as tools from "tools/*". */
 function workspaceFolders(root: string): string[] {

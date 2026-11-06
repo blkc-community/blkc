@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createFileStore, type AgentStore, type AgentsState } from "@blkc-code/agents";
-import { evolveMap, roomForPath, scanProject, type OfficeMap, type ScanOptions } from "@blkc-code/mapgen";
+import { evolveMap, roomForPath, scanProject, type OfficeMap, type ScanOptions, type TreeOptions } from "@blkc-code/mapgen";
 import { WorldConfigSchema } from "@blkc-code/core";
 import { discover } from "../commands/check.js";
 
@@ -108,6 +108,27 @@ export const readOfficeState = (kitDir: string): Promise<AgentsState> => kitStor
 
 export const updateOfficeState = (kitDir: string, change: (state: AgentsState) => void): Promise<AgentsState> => kitStore(kitDir).update(change);
 
+/** The office's own Kit is never a building. */
+const ownKit = (kitDir: string, root: string): string[] => {
+  const own = path.relative(root, kitDir).split(path.sep).join("/");
+  return own && !own.startsWith("..") ? [own] : [];
+};
+
+/** How this Kit reads the project as a tree. */
+export function readTreeOptions(kitDir: string | undefined, root: string): TreeOptions {
+  if (!kitDir) return {};
+  const parsed = WorldConfigSchema.safeParse(readJsonSync(path.join(kitDir, WORLD_FILE)) ?? {});
+  const config = parsed.success ? parsed.data : {};
+  return {
+    ...(config.applications ? { markers: config.applications.markers, replaceDefaults: config.applications.replaceDefaults } : {}),
+    ...(config.include ? { include: config.include } : {}),
+    ignore: [...(config.ignore ?? []), ...ownKit(kitDir, root)],
+    ...(config.roads ? { roads: config.roads } : {}),
+    ...(config.fileGroups ? { fileGroups: config.fileGroups } : {}),
+    ...(config.partTypes ? { partTypes: config.partTypes } : {}),
+  };
+}
+
 /** The project's name is the map's seed, so no two projects get the same building. */
 export function projectSeed(root: string): string {
   try {
@@ -139,7 +160,8 @@ export async function writeMap(kitDir: string, map: OfficeMap): Promise<void> {
 export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean; omitted: number }> {
   const previous = options.reset ? undefined : await readMap(kitDir);
   if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false, omitted: 0 };
-  const scan = scanProject(root, readWorldConfig(kitDir));
+  const config = readWorldConfig(kitDir);
+  const scan = scanProject(root, { ...config, ignore: [...(config.ignore ?? []), ...ownKit(kitDir, root)] });
   const { map, changes } = evolveMap(previous, scan, options.seed ?? previous?.seed ?? projectSeed(root));
   const same = previous && JSON.stringify(previous) === JSON.stringify(map);
   if (!same) await writeMap(kitDir, map);
