@@ -196,13 +196,21 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`).replace(/&#38;/g, "&amp;");
 }
 
-/** The web font a Kit names first, as a Google Fonts link, if it names one in quotes. */
-function themeFontLink(manifest: unknown): string {
+/** The web fonts a Kit names in quotes, as Google Fonts links. */
+function themeFontLinks(manifest: unknown): string {
   const theme = (manifest as { theme?: { settings?: { typography?: { fontFamilies?: { fontFamily?: unknown }[] } } } } | null)?.theme;
-  const family = theme?.settings?.typography?.fontFamilies?.[0]?.fontFamily;
-  const name = typeof family === "string" ? /^\s*['"]([^'"]+)['"]/.exec(family)?.[1] : undefined;
-  if (!name) return "";
-  return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${escapeHtml(encodeURIComponent(name))}&amp;display=swap">`;
+  return (theme?.settings?.typography?.fontFamilies ?? []).slice(0, 2).map(({ fontFamily }) => {
+    const name = typeof fontFamily === "string" ? /^\s*['"]([^'"]+)['"]/.exec(fontFamily)?.[1] : undefined;
+    return name ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${escapeHtml(encodeURIComponent(name))}&amp;display=swap">` : "";
+  }).join("");
+}
+
+/**
+ * Locks a preview down when the host can't set headers: the one script with this nonce
+ * runs, and nothing can reach the network except images and web fonts.
+ */
+function previewPolicy(nonce: string): string {
+  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src * data:; base-uri 'self'">`;
 }
 
 /**
@@ -210,19 +218,36 @@ function themeFontLink(manifest: unknown): string {
  * <style> holding @blkc-code/render-web/styles.css or a <link> to it. `head` is
  * trusted markup; everything taken from the manifest is escaped.
  */
-function renderManifestDocument(manifest: unknown, options: { page?: string; head?: string; lang?: string } = {}): string {
+function renderManifestDocument(
+  manifest: unknown,
+  options: {
+    page?: string;
+    head?: string;
+    lang?: string;
+    /** @blkc-code/render-canvas/runtime.txt. Runs only if the page has a canvas Block. */
+    canvasRuntime?: string;
+    /** Adds a policy to the page itself: for previews on hosts that can't send a header. */
+    nonce?: string;
+  } = {},
+): string {
   const name = (manifest as { name?: unknown } | null)?.name;
   const title = typeof name === "string" ? name : "BLKC preview";
+  const body = renderManifestToHTML(manifest, options);
+  const nonce = options.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : "";
+  const runtime = options.canvasRuntime && body.includes("data-blkc-canvas=")
+    ? `<script${nonce}>${options.canvasRuntime.replace(/<\/script/gi, "<\\/script")}</script>`
+    : "";
   return `<!doctype html>
 <html lang="${escapeHtml(options.lang ?? "en")}">
 <head>
 <meta charset="utf-8">
+${options.nonce ? previewPolicy(escapeHtml(options.nonce)) : ""}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-${themeFontLink(manifest)}
+${themeFontLinks(manifest)}
 ${options.head ?? ""}
 </head>
-<body style="margin:0">${renderManifestToHTML(manifest, options)}</body>
+<body style="margin:0">${body}${runtime}</body>
 </html>
 `;
 }

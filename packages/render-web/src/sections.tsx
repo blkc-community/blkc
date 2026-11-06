@@ -31,18 +31,18 @@ interface CardItem {
   link?: LinkValue;
 }
 
-const BAND = "w-full px-4 py-16 sm:py-20";
+const BAND = "w-full px-6 py-16 sm:py-24";
 const INNER = "mx-auto flex w-full max-w-blkc flex-col gap-8";
-const HEADING = "text-3xl font-bold tracking-tight sm:text-4xl";
-const LEAD = "max-w-2xl text-lg text-muted-foreground";
+const HEADING = "blkc-heading text-3xl font-bold tracking-tight text-balance sm:text-4xl";
+const LEAD = "max-w-2xl text-lg text-muted-foreground text-pretty";
 const BUTTON =
-  "inline-flex w-fit items-center justify-center rounded-md bg-primary px-6 py-3 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex w-fit items-center justify-center rounded-lg bg-accent-foreground px-7 py-3.5 text-base font-semibold text-accent no-underline shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-function CardGrid({ items, showLinks }: { items: CardItem[]; showLinks: boolean }): ReactNode {
+function CardGrid({ items, showLinks, surface }: { items: CardItem[]; showLinks: boolean; surface: string }): ReactNode {
   return (
     <ul className="grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item, index) => (
-        <li key={index} className="flex flex-col gap-2 rounded-lg border border-border p-6">
+        <li key={index} className={clsx("flex flex-col gap-3 rounded-xl border border-border p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md", surface)}>
           <h3 className="text-xl font-semibold">{item.title}</h3>
           {item.text && <p className="text-muted-foreground">{item.text}</p>}
           {showLinks && item.link && (
@@ -68,7 +68,7 @@ export function ServicesBlock({ props: p, className, style }: BlockProps<Service
       <div className={INNER}>
         <h2 className={HEADING}>{p.heading}</h2>
         {p.intro && <p className={LEAD}>{p.intro}</p>}
-        <CardGrid items={p.items ?? []} showLinks />
+        <CardGrid items={p.items ?? []} showLinks surface="bg-muted" />
       </div>
     </section>
   );
@@ -88,10 +88,10 @@ export function StoryBlock({ props: p, className, style }: BlockProps<StoryProps
       <div className="mx-auto grid w-full max-w-blkc items-center gap-10 md:grid-cols-2">
         <div className={clsx("flex flex-col gap-4", p.imageSide === "left" && "md:order-2")}>
           <h2 className={HEADING}>{p.heading}</h2>
-          {body && <div className="flex flex-col gap-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: body }} />}
+          {body && <div className="flex flex-col gap-3 text-lg leading-relaxed text-muted-foreground [&_strong]:text-foreground" dangerouslySetInnerHTML={{ __html: body }} />}
         </div>
         {p.image && (
-          <img src={p.image.src} alt={p.image.alt} className="h-auto w-full rounded-lg object-cover" />
+          <img src={p.image.src} alt={p.image.alt} className="h-auto w-full rounded-2xl border border-border object-cover shadow-lg" />
         )}
       </div>
     </section>
@@ -108,7 +108,7 @@ export function ValuesBlock({ props: p, className, style }: BlockProps<ValuesPro
     <section className={clsx("blkc-values bg-muted", BAND, className)} style={style}>
       <div className={INNER}>
         <h2 className={HEADING}>{p.heading}</h2>
-        <CardGrid items={p.items ?? []} showLinks={false} />
+        <CardGrid items={p.items ?? []} showLinks={false} surface="bg-background" />
       </div>
     </section>
   );
@@ -122,8 +122,8 @@ export interface CtaProps {
 
 export function CtaBlock({ props: p, className, style }: BlockProps<CtaProps>): ReactNode {
   return (
-    <section className={clsx("blkc-cta bg-accent text-accent-foreground", BAND, className)} style={style}>
-      <div className={clsx(INNER, "items-center text-center")}>
+    <section className={clsx("blkc-cta", BAND, className)} style={style}>
+      <div className={clsx(INNER, "items-center rounded-3xl bg-accent px-6 py-14 text-center text-accent-foreground shadow-lg sm:py-20")}>
         <h2 className={HEADING}>{p.heading}</h2>
         {p.text && <p className="max-w-2xl text-lg">{p.text}</p>}
         {p.cta && (
@@ -151,7 +151,7 @@ export function ContactBlock({ props: p, className, style }: BlockProps<ContactP
       <div className={INNER}>
         <h2 className={HEADING}>{p.heading}</h2>
         {p.intro && <p className={LEAD}>{p.intro}</p>}
-        <address className="flex flex-col gap-2 not-italic">
+        <address className="grid gap-4 not-italic sm:grid-cols-2 lg:grid-cols-3 [&>*]:rounded-xl [&>*]:border [&>*]:border-border [&>*]:bg-muted [&>*]:p-6 [&>*]:font-medium [&>*]:shadow-sm">
           {p.email && <a href={`mailto:${encodeURI(p.email)}`} className="text-primary underline-offset-4 hover:underline">{p.email}</a>}
           {p.phone && <a href={`tel:${p.phone.replace(/[^+\d]/g, "")}`} className="text-primary underline-offset-4 hover:underline">{p.phone}</a>}
           {p.address && <span>{p.address}</span>}

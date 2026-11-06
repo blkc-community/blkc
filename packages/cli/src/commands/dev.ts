@@ -12,6 +12,7 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { FSWatcher, watch } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -23,6 +24,7 @@ import { errorCodeDocsUrl, findErrorCode, parseAny, parseAnyCircuit, parseAnyKit
 import { kitPages } from "@blkc-code/render-web";
 import { renderManifestDocument } from "@blkc-code/render-web/server";
 import stylesheet from "@blkc-code/render-web/styles.css";
+import canvasRuntime from "@blkc-code/render-canvas/runtime.txt";
 import { discover, kindOf, validateOne, type CheckIssue } from "./check.js";
 import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
 import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
@@ -71,6 +73,26 @@ async function readCompanions(dir: string): Promise<Json[]> {
   return out;
 }
 
+/** office-state.json beside a Kit overrides who and what its office shows, so anything can drive it. */
+async function applyOfficeState(dir: string, pages: Json[]): Promise<void> {
+  let state: Json;
+  try {
+    state = (await readJson(path.join(dir, "office-state.json"))) as Json;
+  } catch {
+    return; // none yet, or half written: the next save reloads this
+  }
+  for (const page of pages) {
+    for (const block of (page["blocks"] ?? []) as { block?: string; props?: Json }[]) {
+      if (block.block !== "office" && !Array.isArray(block.props?.["agents"])) continue;
+      block.props = {
+        ...block.props,
+        ...(Array.isArray(state["agents"]) ? { agents: state["agents"] } : {}),
+        ...(Array.isArray(state["tasks"]) ? { tasks: state["tasks"] } : {}),
+      };
+    }
+  }
+}
+
 /** A manifest as the renderer needs it, with theme.json, pages/ and boards/ folded in. */
 async function loadManifest(file: string, kind: Kind): Promise<Json> {
   const raw = await readJson(file);
@@ -96,7 +118,9 @@ async function loadManifest(file: string, kind: Kind): Promise<Json> {
       // no theme.json, or one check is already reporting
     }
   }
-  return { ...kit, theme, content: { pages: [...files, ...inline] } };
+  const pages = [...files, ...inline];
+  await applyOfficeState(dir, pages);
+  return { ...kit, theme, content: { pages } };
 }
 
 const announced = new Set<string>();
@@ -147,9 +171,11 @@ const escapeHtml = (value: string): string =>
 /** Links in a preview open in a new tab, so a click can't navigate the frame away. */
 const FRAME_HEAD = `<base target="_blank"><style>${stylesheet}</style>`;
 
-// A frame holds rendered manifest content, so it gets no scripts, and no network beyond images and web fonts.
-const FRAME_CSP =
-  "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src * data:; base-uri 'self'";
+// A frame holds rendered manifest content, so the only script it can run is our canvas runtime, and it
+// has no network beyond images and web fonts.
+const frameCsp = (nonce?: string): string =>
+  `default-src 'none'; ${nonce ? `script-src 'nonce-${nonce}'; ` : ""}style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src * data:; base-uri 'self'`;
+const FRAME_CSP = frameCsp();
 const SHELL_CSP = "default-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'";
 
 function send(res: ServerResponse, status: number, type: string, body: string, csp?: string): void {
@@ -213,7 +239,9 @@ export async function startDevServer(root: string, port: number, exactPort: bool
       }
       const manifest = await loadManifest(item.file, item.kind);
       const page = url.searchParams.get("page") ?? undefined;
-      return send(res, 200, "text/html", renderManifestDocument(manifest, { page, head: FRAME_HEAD + (css ? `<style>${css}</style>` : "") }), FRAME_CSP);
+      const nonce = randomBytes(16).toString("hex");
+      const html = renderManifestDocument(manifest, { page, head: FRAME_HEAD + (css ? `<style>${css}</style>` : ""), canvasRuntime, nonce });
+      return send(res, 200, "text/html", html, frameCsp(nonce));
     }
     send(res, 404, "text/plain", "Not found");
   }

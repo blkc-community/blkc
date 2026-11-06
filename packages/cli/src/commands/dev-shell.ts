@@ -104,8 +104,9 @@ function renderFrames() {
   const names = width === "all" ? Object.keys(WIDTHS) : [width];
   for (const name of names) {
     const frame = make("iframe", { title: item.name + " at " + name + " width", src: frameSrc(item) });
-    // No allow-scripts and no allow-same-origin: rendered content stays inert.
-    frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    // Scripts for the canvas runtime only (the page policy allows no other), and no same-origin,
+    // so nothing in a frame can reach this page, its storage or the server.
+    frame.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
     const figure = make("figure", {}, make("figcaption", { textContent: name + " · " + WIDTHS[name] + "px" }), frame);
     figure.style.width = WIDTHS[name] + "px";
     box.append(figure);

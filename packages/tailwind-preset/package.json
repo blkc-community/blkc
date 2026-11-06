@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/tailwind-preset",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Tailwind preset and theme tokens for BLKC Blocks, Kits and Circuits",
   "main": "dist/index.js",

@@ -15,7 +15,7 @@ import blkcPreset, {
 describe("blkcTokens", () => {
   it("covers every token the renderer reads", () => {
     expect(blkcTokens["--blkc-color-primary"]).toBe("#0066cc");
-    expect(blkcTokens["--blkc-color-border"]).toBe("#e0e0e0");
+    expect(blkcTokens["--blkc-color-border"]).toContain("color-mix");
     expect(blkcTokens["--blkc-max-width"]).toBe("1200px");
     expect(blkcTokens["--blkc-border-radius"]).toBe("8px");
   });

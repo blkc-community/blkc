@@ -29,6 +29,8 @@ export interface BlkcThemeTokens {
   "--blkc-color-text": string;
   "--blkc-color-text-secondary": string;
   "--blkc-color-border": string;
+  "--blkc-color-surface": string;
+  "--blkc-color-accent": string;
   "--blkc-font-family": string;
   "--blkc-font-size-base": string;
   "--blkc-font-size-sm": string;
@@ -58,7 +60,10 @@ export const blkcTokens: BlkcThemeTokens = {
   "--blkc-color-background": "#ffffff",
   "--blkc-color-text": "#1a1a1a",
   "--blkc-color-text-secondary": "#6c757d",
-  "--blkc-color-border": "#e0e0e0",
+  // Worked out from the text and background, so a dark Kit gets dark surfaces by itself.
+  "--blkc-color-border": "color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff))",
+  "--blkc-color-surface": "color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 6%, var(--blkc-color-background, #ffffff))",
+  "--blkc-color-accent": "var(--blkc-color-primary, #0066cc)",
   "--blkc-font-family":
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif",
   "--blkc-font-size-base": "1rem",
@@ -89,7 +94,18 @@ export type BlkcThemeOverrides = Partial<BlkcThemeTokens>;
  * Resolve a token set, filling gaps from `blkcTokens`.
  */
 export function resolveBlkcTheme(overrides: BlkcThemeOverrides = {}): BlkcThemeTokens {
-  return { ...blkcTokens, ...overrides };
+  const theme = { ...blkcTokens, ...overrides };
+  // Surface, border and accent are worked out from other tokens, so their fallbacks must
+  // follow any override of those tokens.
+  const follow = (value: string): string =>
+    value
+      .replace("#0066cc", theme["--blkc-color-primary"])
+      .replace("#1a1a1a", theme["--blkc-color-text"])
+      .replace("#ffffff", theme["--blkc-color-background"]);
+  for (const key of ["--blkc-color-surface", "--blkc-color-border", "--blkc-color-accent"] as const) {
+    if (!overrides[key]) theme[key] = follow(blkcTokens[key]);
+  }
+  return theme;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,11 +151,11 @@ const utilityTheme: ReadonlyArray<readonly [utility: string, token: keyof BlkcTh
   ["--color-secondary-foreground", "--blkc-color-background"],
   ["--color-background", "--blkc-color-background"],
   ["--color-foreground", "--blkc-color-text"],
-  ["--color-muted", "--blkc-color-background"],
+  ["--color-muted", "--blkc-color-surface"],
   ["--color-muted-foreground", "--blkc-color-text-secondary"],
   ["--color-border", "--blkc-color-border"],
   ["--color-input", "--blkc-color-border"],
-  ["--color-accent", "--blkc-color-primary"],
+  ["--color-accent", "--blkc-color-accent"],
   ["--color-accent-foreground", "--blkc-color-background"],
   ["--color-ring", "--blkc-color-primary"],
   ["--radius-blkc", "--blkc-border-radius"],
@@ -213,11 +229,11 @@ export const blkcPreset: BlkcTailwindPreset = {
         "secondary-foreground": "var(--blkc-color-background, #ffffff)",
         background: "var(--blkc-color-background, #ffffff)",
         foreground: "var(--blkc-color-text, #1a1a1a)",
-        muted: "var(--blkc-color-background, #ffffff)",
+        muted: "var(--blkc-color-surface, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 6%, var(--blkc-color-background, #ffffff)))",
         "muted-foreground": "var(--blkc-color-text-secondary, #6c757d)",
-        border: "var(--blkc-color-border, #e0e0e0)",
-        input: "var(--blkc-color-border, #e0e0e0)",
-        accent: "var(--blkc-color-primary, #0066cc)",
+        border: "var(--blkc-color-border, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff)))",
+        input: "var(--blkc-color-border, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff)))",
+        accent: "var(--blkc-color-accent, var(--blkc-color-primary, #0066cc))",
         "accent-foreground": "var(--blkc-color-background, #ffffff)",
         ring: "var(--blkc-color-primary, #0066cc)",
       },

@@ -126,6 +126,47 @@ describe("renderManifestDocument", () => {
   });
 });
 
+describe("the office Block", () => {
+  const office = { block: "office", props: {
+    heading: "Team",
+    agents: [{ id: "ada", name: "Ada", state: "working", task: "Build </script><script>alert(1)</script>" }, { id: "bob", state: "dancing" }],
+    tasks: [{ title: "One", state: "done" }, { title: "Two", state: "todo" }],
+  } };
+  const kitWithOffice = { ...kit, content: { pages: [{ slug: "", title: "Home", blocks: [office] }] } };
+
+  it("gives the canvas its data, and can't be broken out of", () => {
+    const html = renderManifestToHTML(kitWithOffice);
+    expect(html).toContain('data-blkc-canvas="office"');
+    const data = /<script type="application\/json"[^>]*>(.*?)<\/script>/s.exec(html)?.[1] ?? "";
+    expect(data).not.toContain("<");
+    expect(JSON.parse(data).agents[0].name).toBe("Ada");
+    expect(html).not.toContain("<script>alert");
+  });
+
+  it("reads well with no JavaScript: names, status and quest progress are real text", () => {
+    const html = renderManifestToHTML(kitWithOffice);
+    for (const expected of ["Ada", "Working", "dancing", "Quests: 1 of 2 done", 'aria-valuenow="50"']) expect(html).toContain(expected);
+  });
+
+  it("copes with no agents and bad values", () => {
+    for (const props of [{}, { agents: "no", tasks: 3 }, { agents: [{}], tasks: [{}] }]) {
+      expect(renderManifestToHTML({ ...kit, content: { pages: [{ slug: "", title: "H", blocks: [{ block: "office", props }] }] } })).toContain("data-blkc-canvas");
+    }
+  });
+
+  it("adds the script only to a page with a canvas, with the nonce and policy", () => {
+    const withCanvas = renderManifestDocument(kitWithOffice, { canvasRuntime: "go();", nonce: "abc" });
+    expect(withCanvas).toContain('<script nonce="abc">go();</script>');
+    expect(withCanvas).toContain("script-src 'nonce-abc'");
+    expect(renderManifestDocument(kit, { canvasRuntime: "go();", nonce: "abc" })).not.toContain("go();");
+  });
+
+  it("can't have its script tag closed early by the runtime", () => {
+    const html = renderManifestDocument(kitWithOffice, { canvasRuntime: "x='</script>'" });
+    expect(html).toContain("<\\/script>");
+  });
+});
+
 describe("styles.css", () => {
   const css = "dist/styles.css";
 
@@ -137,9 +178,11 @@ describe("styles.css", () => {
   it.skipIf(!existsSync(css))("has a rule for every class the previews use", () => {
     const compiled = readFileSync(css, "utf8");
     const everySection = JSON.parse(readFileSync("fixtures/kit-basic.json", "utf8"));
-    const html = [renderManifestToHTML(kit), renderManifestToHTML(everySection), renderManifestToHTML(circuit), renderManifestToHTML({ kind: "ui", id: "custom", attributes: {}, example: { a: 1 } })].join("");
-    const classes = new Set([...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean));
-    const missing = [...classes].filter((name) => !name.startsWith("blkc-") && !compiled.includes(`.${name.replace(/[:/.]/g, (c) => `\\${c}`)}`));
+    const office = { block: "office", props: { heading: "H", intro: "I", agents: [{ id: "a", state: "blocked", task: "T" }], tasks: [{ title: "T", state: "done" }] } };
+    const html = [renderManifestToHTML({ ...kit, content: { pages: [{ slug: "", title: "H", blocks: [office, { block: "button", props: { label: "B", href: "#" } }, { block: "image", props: { src: "/x.png", alt: "x", caption: "c" } }, { block: "section", props: {} }] }] } }), renderManifestToHTML(kit), renderManifestToHTML(everySection), renderManifestToHTML(circuit), renderManifestToHTML({ kind: "ui", id: "custom", attributes: {}, example: { a: 1 } })].join("");
+    const decoded = html.replace(/&amp;/g, "&").replace(/&gt;/g, ">");
+    const classes = new Set([...decoded.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean));
+    const missing = [...classes].filter((name) => !name.startsWith("blkc-") && !compiled.includes(`.${name.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`)}`));
     expect(missing).toEqual([]);
   });
 });

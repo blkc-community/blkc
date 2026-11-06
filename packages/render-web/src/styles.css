@@ -15,3 +15,8 @@
   color: var(--blkc-color-text, #1a1a1a);
   font-family: var(--blkc-font-family, system-ui, sans-serif);
 }
+
+/* A Kit can give headings their own font. */
+.blkc-heading {
+  font-family: var(--blkc-font-family-heading, inherit);
+}

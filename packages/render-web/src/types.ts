@@ -119,6 +119,8 @@ export interface ThemeVariables {
   "--blkc-color-text"?: string;
   "--blkc-color-text-secondary"?: string;
   "--blkc-color-border"?: string;
+  "--blkc-color-surface"?: string;
+  "--blkc-color-accent"?: string;
   
   // Typography
   "--blkc-font-family"?: string;
@@ -159,7 +161,9 @@ export const DEFAULT_THEME: ThemeVariables = {
   "--blkc-color-background": "#ffffff",
   "--blkc-color-text": "#1a1a1a",
   "--blkc-color-text-secondary": "#6c757d",
-  "--blkc-color-border": "#e0e0e0",
+  "--blkc-color-border": "color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff))",
+  "--blkc-color-surface": "color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 6%, var(--blkc-color-background, #ffffff))",
+  "--blkc-color-accent": "var(--blkc-color-primary, #0066cc)",
   
   // Typography
   "--blkc-font-family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif",
@@ -312,6 +316,9 @@ export interface ButtonProps {
  */
 export interface SectionProps {
   children?: ReactNode;
+  /** A section can hold its own words, so it is useful with no Blocks inside. */
+  heading?: string;
+  content?: string;
   backgroundColor?: string;
   textColor?: string;
   padding?: string;

@@ -81,7 +81,7 @@ describe("blkc dev", () => {
     await startDev();
     const html = await frame("kits/pixel-office");
     expect(html).toContain("blkc-hero");
-    expect(html).toContain("--blkc-color-background:#1a1a2e");
+    expect(html).toContain("--blkc-color-background:#14142b");
     expect(html).toContain("Press%20Start%202P");
     expect(html).toMatch(/<style>.*\.bg-primary/s);
   });
@@ -177,12 +177,48 @@ describe("blkc dev", () => {
     expect((await fetch(`${base}/`, { method: "POST" })).status).toBe(405);
   });
 
-  it("gives previews no scripts", async () => {
+  it("gives previews no scripts unless a canvas needs one, and then only the runtime", async () => {
     blkc("new", "kit", "demo");
+    blkc("new", "kit", "pixel-office");
     await startDev();
-    const response = await fetch(`${base}/frame?item=kits/demo`);
-    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
-    expect(await text("/shell.js")).toContain('"allow-popups allow-popups-to-escape-sandbox"');
+    const plain = await fetch(`${base}/frame?item=kits/demo`);
+    expect(plain.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(await plain.text()).not.toMatch(/<script nonce/);
+
+    const office = await fetch(`${base}/frame?item=${encodeURIComponent("kits/pixel-office")}`);
+    const nonce = /nonce-([0-9a-f]+)/.exec(office.headers.get("content-security-policy") ?? "")?.[1];
+    const html = await office.text();
+    expect(nonce).toBeTruthy();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    expect(html.match(/<script nonce=/g)).toHaveLength(1);
+    expect(html).toContain('data-blkc-canvas="office"');
+
+    const shell = await text("/shell.js");
+    expect(shell).toContain('"allow-scripts allow-popups allow-popups-to-escape-sandbox"');
+    expect(shell).not.toContain("allow-same-origin'");
+  });
+
+  it("lets office-state.json drive the office, ignoring it while it is half written", async () => {
+    blkc("new", "kit", "pixel-office");
+    await startDev();
+    const file = path.join(dir, "kits/pixel-office/office-state.json");
+    writeFileSync(file, JSON.stringify({ agents: [{ id: "zed", name: "Zed From State", state: "blocked" }], tasks: [{ title: "From state", state: "todo" }] }));
+    const html = await frame("kits/pixel-office");
+    expect(html).toContain("Zed From State");
+    expect(html).toContain("From state");
+    expect(html).not.toContain("Nova");
+    writeFileSync(file, "{ half");
+    expect(await frame("kits/pixel-office")).toContain("Nova");
+    expect(JSON.parse(await text("/api/state")).issues).toEqual([]);
+  });
+
+  it("shows the Kit's Every Block page", async () => {
+    blkc("new", "kit", "pixel-office");
+    await startDev();
+    const html = await frame("kits/pixel-office", "blocks");
+    for (const block of ["blkc-hero", "blkc-text", "blkc-image", "blkc-button", "blkc-section", "blkc-services", "blkc-story", "blkc-values", "blkc-cta", "blkc-contact"]) {
+      expect(html).toContain(block);
+    }
   });
 
 });
