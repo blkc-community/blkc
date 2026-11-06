@@ -17,6 +17,7 @@ import { OFFICE_PLAN, worldPlan, type RoomRole, type Theme, type WorldPlan } fro
 export * from "./plan.js";
 export * from "./project-files.js";
 export * from "./tree.js";
+export * from "./roads.js";
 
 export interface MapRoom {
   id: string;
@@ -32,15 +33,26 @@ export interface MapRoom {
   /** Edited by hand: the generator leaves it alone. */
   locked?: boolean;
   files?: number;
+  /** The road this sits on, as a path. */
+  road?: string;
 }
-export interface MapItem { type: string; x: number; y: number; room?: string }
+export interface MapItem {
+  type: string;
+  x: number;
+  y: number;
+  room?: string;
+  /** The real folder or file group this stands for. */
+  part?: string;
+  /** Shown beside it on the map, for things like a group of loose files. */
+  label?: string;
+}
 export interface MapDoor { x: number; y: number }
 export interface OfficeMap {
   version: 1;
   /** Which world this map is for. The office if left out. */
   world?: string;
-  /** halls: rooms in even rows along corridors. Left out on older maps, whose rooms were placed one against another. */
-  layout?: "halls";
+  /** roads: grows from the project's folders, with no size limit. halls: even rows along corridors. Left out on the oldest maps. */
+  layout?: "halls" | "roads";
   /** How tall the rooms are in the first pair of rows. */
   roomHeight?: number;
   seed: string;
@@ -107,8 +119,8 @@ const MAX_APP_DEPTH = 5;
 const MAX_DEPTH = 8;
 const CONTAINERS = new Set(["src", "packages", "apps", "services", "libs", "lib", "modules", "crates", "cmd", "internal", "app"]);
 
-const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-const titled = (value: string): string =>
+export const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+export const titled = (value: string): string =>
   value.replace(/^\./, "").split(/[-_]/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ").slice(0, 18) || value.slice(0, 18);
 
 export function hashText(text: string): number {
@@ -118,7 +130,7 @@ export function hashText(text: string): number {
 }
 
 /** A small seeded generator, so the same project always grows the same way. */
-function rng(seed: string): () => number {
+export function rng(seed: string): () => number {
   let state = hashText(seed) || 1;
   return () => {
     state ^= state << 13;
@@ -306,7 +318,7 @@ export function scanProject(root: string, options: ScanOptions = {}): ProjectSca
 // --- What a folder looks like ---------------------------------------------------------------------------
 
 /** The look comes from a folder's own name, so everything in apps/ doesn't look like a front end. */
-function themeFor(folder: string, plan: WorldPlan, random: () => number): Theme {
+export function themeFor(folder: string, plan: WorldPlan, random: () => number): Theme {
   const own = folder.replace(/\/$/, "").split("/").pop() ?? folder;
   const found = plan.themes.find(({ match }) => match.test(own));
   if (found) return found.theme;
@@ -324,7 +336,7 @@ function targetSize(id: string, files: number, seed: string, compact: false | nu
   };
 }
 
-const deskCount = (files: number): number => Math.min(9, Math.max(1, Math.round(Math.log2(files + 1) - 1)));
+export const deskCount = (files: number): number => Math.min(9, Math.max(1, Math.round(Math.log2(files + 1) - 1)));
 
 // --- Geometry -------------------------------------------------------------------------------------------
 
@@ -549,7 +561,7 @@ function reachable(rooms: Box[], doors: MapDoor[], from: Box): Set<Box> {
 
 // --- Furnishing ------------------------------------------------------------------------------------------
 
-function furnish(room: MapRoom, doors: MapDoor[], seed: string, plan: WorldPlan): MapItem[] {
+export function furnish(room: MapRoom, doors: MapDoor[], seed: string, plan: WorldPlan): MapItem[] {
   const random = rng(`${seed}:furnish:${room.id}:${room.w}x${room.h}`);
   const blocked = new Set<string>();
   const reserved = new Set<string>();

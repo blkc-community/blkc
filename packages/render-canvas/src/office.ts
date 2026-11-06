@@ -76,8 +76,10 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
   const width = (): number => world.cols * TILE;
   const height = (): number => world.rows * TILE;
 
+  // A big map starts small on screen, so it can be zoomed further: as far as 4x true size.
+  const zoomLimit = (): number => Math.max(MAX_ZOOM, scale > 0 ? 4 / scale : MAX_ZOOM);
   const clampView = (): void => {
-    view.zoom = Math.min(MAX_ZOOM, Math.max(1, view.zoom));
+    view.zoom = Math.min(zoomLimit(), Math.max(1, view.zoom));
     view.x = Math.min(width() - width() / view.zoom, Math.max(0, view.x));
     view.y = Math.min(height() - height() / view.zoom, Math.max(0, view.y));
   };
@@ -192,7 +194,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
       return;
     }
     const before = event ? tileAt(event) : { x: view.x / TILE + width() / view.zoom / TILE / 2, y: view.y / TILE + height() / view.zoom / TILE / 2 };
-    view.zoom = Math.min(MAX_ZOOM, Math.max(1, view.zoom * factor));
+    view.zoom = Math.min(zoomLimit(), Math.max(1, view.zoom * factor));
     if (event) {
       const after = tileAt(event);
       view.x += (before.x - after.x) * TILE;
@@ -233,7 +235,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
     setLayout(layout) {
       applyLayout(world, layout);
       buildingDirty = true;
-      view.zoom = Math.min(view.zoom, MAX_ZOOM);
+      view.zoom = Math.min(view.zoom, zoomLimit());
       clampView();
       scale = 0;
       resize();

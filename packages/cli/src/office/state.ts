@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createFileStore, type AgentStore, type AgentsState } from "@blkc-code/agents";
-import { evolveMap, roomForPath, scanProject, type OfficeMap, type ScanOptions, type TreeOptions } from "@blkc-code/mapgen";
+import { evolveMap, evolveRoads, roomForPath, scanProject, scanTree, type OfficeMap, type ScanOptions, type TreeOptions } from "@blkc-code/mapgen";
 import { WorldConfigSchema } from "@blkc-code/core";
 import { discover } from "../commands/check.js";
 
@@ -160,6 +160,14 @@ export async function writeMap(kitDir: string, map: OfficeMap): Promise<void> {
 export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean; omitted: number }> {
   const previous = options.reset ? undefined : await readMap(kitDir);
   if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false, omitted: 0 };
+  // New maps grow from the project tree. Older maps keep their layout until they're reset.
+  if (!previous || previous.layout === "roads") {
+    const tree = scanTree(root, readTreeOptions(kitDir, root));
+    const { map, changes } = evolveRoads(previous, tree, options.seed ?? previous?.seed ?? projectSeed(root));
+    const same = previous && JSON.stringify(previous) === JSON.stringify(map);
+    if (!same) await writeMap(kitDir, map);
+    return { map, changes, wrote: !same, omitted: tree.truncated ? 1 : 0 };
+  }
   const config = readWorldConfig(kitDir);
   const scan = scanProject(root, { ...config, ignore: [...(config.ignore ?? []), ...ownKit(kitDir, root)] });
   const { map, changes } = evolveMap(previous, scan, options.seed ?? previous?.seed ?? projectSeed(root));

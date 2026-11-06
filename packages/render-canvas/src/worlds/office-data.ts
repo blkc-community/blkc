@@ -17,6 +17,7 @@ export const OFFICE_ITEMS: WorldData["items"] = {
   server: { w: 1, h: 1 },
   table: { w: 3, h: 2, spot: { x: 1, y: 2 }, use: "board" },
   rug: { w: 4, h: 3, solid: false },
+  pile: { w: 1, h: 1, solid: false },
   arcade: { w: 1, h: 1, spot: { x: 0, y: 1 }, use: "lounge" },
   fridge: { w: 1, h: 1, spot: { x: 0, y: 1 }, use: "lounge" },
   printer: { w: 1, h: 1, spot: { x: 0, y: 1 } },

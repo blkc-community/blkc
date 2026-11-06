@@ -433,10 +433,10 @@ describe("hooks hand quests to Claude Code", () => {
     writeFileSync(path.join(dir, "src/api/a.ts"), "x");
     writeFileSync(path.join(dir, "src/b.ts"), "x");
     blkc("office", "map");
-    expect(json("kits/pixel-office/office-map.json").rooms.some((r: { id: string }) => r.id === "src")).toBe(true);
+    expect(json("kits/pixel-office/office-map.json").rooms.some((r: { id: string }) => r.id === "src-api")).toBe(true);
     fire({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: path.join(dir, "src/api/a.ts") } });
     const agent = json(STATE).agents.find((a: { id: string }) => a.id === "claude-abcd1234");
-    expect(agent.area).toBe("src");
+    expect(agent.area).toBe("src-api");
     expect(readFileSync(path.join(dir, STATE), "utf8")).not.toContain(dir);
   });
 });

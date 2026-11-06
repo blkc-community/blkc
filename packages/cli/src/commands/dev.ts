@@ -295,7 +295,7 @@ export async function startDevServer(root: string, port: number, exactPort: bool
       if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return send(res, 415, "text/plain", "Send JSON.");
       const dir = await officeKit();
       if (!dir) return send(res, 404, "text/plain", "No such office.");
-      const body = await readBody(req, MAX_STATE_BYTES * 4);
+      const body = await readBody(req, 32 * 1024 * 1024);
       if (body === undefined) return send(res, 413, "text/plain", "That is too large.");
       let incoming: OfficeMap;
       try {
@@ -313,11 +313,11 @@ export async function startDevServer(root: string, port: number, exactPort: bool
         ...(current?.links ? { links: current.links } : {}),
         seed: current?.seed ?? "project",
         evolve: incoming.evolve !== false,
-        cols: Math.min(64, Math.max(6, Math.floor(Number(incoming.cols) || 24))),
-        rows: Math.min(40, Math.max(6, Math.floor(Number(incoming.rows) || 16))),
-        rooms: incoming.rooms.slice(0, 60),
-        doors: incoming.doors.slice(0, 120),
-        furniture: incoming.furniture.slice(0, 400),
+        cols: Math.min(1024, Math.max(6, Math.floor(Number(incoming.cols) || 24))),
+        rows: Math.min(1024, Math.max(6, Math.floor(Number(incoming.rows) || 16))),
+        rooms: incoming.rooms.slice(0, 8000),
+        doors: incoming.doors.slice(0, 16000),
+        furniture: incoming.furniture.slice(0, 60000),
         log: current?.log ?? [],
       });
       return send(res, 200, "application/json", "{}");

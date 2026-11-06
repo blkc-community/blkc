@@ -156,10 +156,10 @@ export function registerOfficeCommand(program: Command): void {
         }
         const { map, changes, omitted } = await evolveKitMap(kit, root, { reset: options.reset, seed: options.seed });
         console.log(`${chalk.green("Map")}: ${map.rooms.length} rooms, ${map.furniture.length} pieces of furniture, ${map.cols}x${map.rows}${map.evolve ? "" : " (frozen)"}`);
-        for (const room of map.rooms.filter((candidate) => candidate.role !== "hall")) console.log(chalk.gray(`  ${room.name}${room.paths[0] ? ` : ${room.paths[0]}` : ""}`));
+        for (const room of map.rooms.filter((candidate) => candidate.role !== "hall" && candidate.role !== "vacant")) console.log(chalk.gray(`  ${room.name}${room.paths[0] ? ` : ${room.paths[0]}` : ""}`));
         for (const change of changes) console.log(change);
         if (map.links?.length) console.log(chalk.gray(`${map.links.length} links between rooms from your package files, ${map.links.filter((link) => link.door).length} with a door.`));
-        if (omitted > 0) console.log(chalk.yellow(`${omitted} smaller folders aren't on the map; agents working there use the lobby.`));
+        if (omitted > 0) console.log(chalk.yellow(map.layout === "roads" ? "This project is very large, so the scan stopped early and part of it isn't on the map." : `${omitted} smaller folders aren't on the map; agents working there use the lobby.`));
       } catch (error) {
         fail(error);
       }

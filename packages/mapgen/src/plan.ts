@@ -24,6 +24,8 @@ export interface WorldPlan {
   fallback: Theme & { floors: string[] };
   /** For the biggest rooms. */
   filler: [string, string];
+  /** What draws each kind of part in a building. Anything else uses the workstation. */
+  partItems?: Record<string, string>;
 }
 
 /** The office, and the world used when a map doesn't name one. */
@@ -59,6 +61,7 @@ export const OFFICE_PLAN: WorldPlan = {
   ],
   fallback: { floor: "", floors: ["wood", "carpet", "tile", "stone", "concrete"], items: ["plant", "shelf", "lamp"], decor: ["poster"] },
   filler: ["plant", "fern"],
+  partItems: { Desk: "desk", "Server rack": "server", Workbench: "table", Whiteboard: "whiteboard", Bookshelf: "shelf", Toolbox: "printer", Plants: "plant", "Filing cabinet": "shelf" },
 };
 
 const plans = new Map<string, WorldPlan>([[OFFICE_PLAN.id, OFFICE_PLAN]]);
