@@ -206,6 +206,18 @@ function themeFontLinks(manifest: unknown): string {
 }
 
 /**
+ * Links in a preview frame must leave the frame: most sites refuse to load inside one, and
+ * the error page would replace the preview. Only links within the page stay.
+ */
+function linksLeavePreview(html: string): string {
+  return html.replace(/<a\b[^>]*>/g, (tag) => {
+    const href = /\shref="([^"]*)"/.exec(tag)?.[1] ?? "";
+    const clean = tag.replace(/\s(target|rel)="[^"]*"/g, "");
+    return clean.replace(/>$/, href === "" || href.startsWith("#") ? ` target="_self">` : ` target="_blank" rel="noopener noreferrer">`);
+  });
+}
+
+/**
  * Locks a preview down when the host can't set headers: the one script with this nonce
  * runs, and nothing can reach the network except images and web fonts.
  */
@@ -228,11 +240,14 @@ function renderManifestDocument(
     canvasRuntime?: string;
     /** Adds a policy to the page itself: for previews on hosts that can't send a header. */
     nonce?: string;
+    /** The page is shown in a frame, so links to other sites must open a new tab. */
+    inFrame?: boolean;
   } = {},
 ): string {
   const name = (manifest as { name?: unknown } | null)?.name;
   const title = typeof name === "string" ? name : "BLKC preview";
-  const body = renderManifestToHTML(manifest, options);
+  const rendered = renderManifestToHTML(manifest, options);
+  const body = options.inFrame ? linksLeavePreview(rendered) : rendered;
   const nonce = options.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : "";
   const runtime = options.canvasRuntime && body.includes("data-blkc-canvas=")
     ? `<script${nonce}>${options.canvasRuntime.replace(/<\/script/gi, "<\\/script")}</script>`

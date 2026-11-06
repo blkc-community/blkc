@@ -167,6 +167,42 @@ describe("the office Block", () => {
   });
 });
 
+describe("links in a framed preview", () => {
+  const links = { ...kit, content: { pages: [{ slug: "", title: "H", blocks: [
+    { block: "hero", props: { heading: "H", cta: { label: "Away", href: "https://github.com/x" }, secondaryCta: { label: "Stay", href: "#here" } } },
+    { block: "button", props: { label: "Forced", href: "https://example.com/y", target: "_self" } },
+    { block: "text", props: { content: "<p><a href=\"https://example.com/z\">in text</a></p>" } },
+  ] }] } };
+  const tag = (html: string, label: string) => {
+    const at = html.indexOf(label);
+    return html.slice(html.lastIndexOf("<a ", at), html.indexOf(">", html.lastIndexOf("<a ", at)) + 1);
+  };
+
+  it("sends every link to another page to a new tab, even one that asks for _self", () => {
+    const html = renderManifestDocument(links, { inFrame: true });
+    for (const label of ["Away", "Forced", "in text"]) {
+      expect(tag(html, label)).toContain('target="_blank"');
+      expect(tag(html, label)).toContain("noopener");
+      expect(tag(html, label)).not.toContain("_self");
+    }
+  });
+
+  it("keeps a link within the page in the frame", () => {
+    expect(tag(renderManifestDocument(links, { inFrame: true }), "Stay")).toContain('target="_self"');
+  });
+
+  it("leaves links alone outside a frame, with no target forced on them", () => {
+    const html = renderManifestDocument(links);
+    expect(tag(html, "Away")).not.toContain("target=");
+    expect(tag(html, "Forced")).toContain('target="_self"');
+  });
+
+  it("does not touch text that only looks like a link", () => {
+    const html = renderManifestDocument({ ...kit, content: { pages: [{ slug: "", title: "H", blocks: [{ block: "hero", props: { heading: "<a href=x target=_self>" } }] }] } }, { inFrame: true });
+    expect(html).not.toContain("<a href=x");
+  });
+});
+
 describe("styles.css", () => {
   const css = "dist/styles.css";
 
