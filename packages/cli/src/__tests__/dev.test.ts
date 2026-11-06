@@ -18,7 +18,7 @@ function blkc(...args: string[]) {
 }
 
 async function startDev(...args: string[]): Promise<void> {
-  const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--port", "0", ...args], { cwd: dir });
+  const proc = spawn(process.execPath, [CLI, "dev", "--no-open", "--no-notify", "--port", "0", ...args], { cwd: dir });
   child = proc;
   base = await new Promise<string>((resolve, reject) => {
     let out = "";
