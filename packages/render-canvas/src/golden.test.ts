@@ -6,7 +6,8 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { daylightAt, drawBuilding, drawWorld, registerPainter, type Palette } from "./draw.js";
 import { registerWorld } from "./pack.js";
-import { DEFAULT_LAYOUT, applyUpdate, createWorld, step, type World } from "./world.js";
+import { linkRoutes } from "./links.js";
+import { DEFAULT_LAYOUT, applyLayout, applyUpdate, createWorld, isWalkable, step, type World } from "./world.js";
 
 const palette: Palette = { primary: "#3b82f6", background: "#1a1a2e", text: "#ffffff", accent: "#f59e0b" };
 
@@ -82,6 +83,52 @@ describe("the office, drawn", () => {
     const world = createWorld({ ...DEFAULT_LAYOUT, agents });
     const shape = { seats: world.seats, spots: world.spots, cols: world.cols, rows: world.rows, walkable: world.walkable };
     expect(createHash("sha1").update(JSON.stringify(shape)).digest("hex")).toMatchInlineSnapshot(`"8987cbced854e183e67c97d665fd1a095a2b25c9"`);
+  });
+});
+
+describe("links between rooms", () => {
+  const scene = {
+    cols: 24, rows: 12,
+    rooms: [
+      { id: "web", name: "Web", x: 1, y: 2, w: 6, h: 6 },
+      { id: "hall", name: "", x: 8, y: 2, w: 6, h: 6 },
+      { id: "ui", name: "Ui", x: 15, y: 2, w: 6, h: 6 },
+    ],
+    doors: [{ x: 7, y: 4 }, { x: 14, y: 5 }],
+    furniture: [],
+  };
+
+  it("follows the route someone would walk, through the doors", () => {
+    const world = createWorld({ ...scene, links: [{ from: "web", to: "ui" }] });
+    const [route] = linkRoutes(world);
+    expect(route?.points.some((p) => p.x === 7 && p.y === 4)).toBe(true);
+    expect(route?.points.some((p) => p.x === 14 && p.y === 5)).toBe(true);
+    for (const point of route?.points ?? []) expect(isWalkable(world, point.x, point.y)).toBe(true);
+  });
+
+  it("leaves out links it can't draw, and never throws on bad data", () => {
+    const world = createWorld({ ...scene, doors: [], links: [{ from: "web", to: "ui" }, { from: "web", to: "gone" }, {} as never, null as never] });
+    expect(world.links).toHaveLength(2);
+    expect(linkRoutes(world)).toEqual([]);
+  });
+
+  it("can be hidden, and is worked out again when the building changes", () => {
+    const calls: string[] = [];
+    const { ctx } = recorder();
+    (ctx as unknown as { setLineDash: () => void }).setLineDash = () => { calls.push("dash"); };
+    const world = createWorld({ ...scene, links: [{ from: "web", to: "ui" }] });
+    drawWorld(ctx, world, 0, palette, daylightAt(12), undefined);
+    expect(calls.length).toBeGreaterThan(0);
+    calls.length = 0;
+    world.showLinks = false;
+    drawWorld(ctx, world, 0, palette, daylightAt(12), undefined);
+    expect(calls).toEqual([]);
+
+    world.showLinks = true;
+    drawWorld(ctx, world, 0, palette, daylightAt(12), undefined);
+    expect(world.routes).toHaveLength(1);
+    applyLayout(world, { ...scene, doors: [], links: [{ from: "web", to: "ui" }] });
+    expect(world.routes).toBeUndefined();
   });
 });
 

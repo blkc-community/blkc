@@ -252,6 +252,11 @@ function renderAlerts(box) {
 const build = { tool: "select", type: "desk", room: undefined, ghost: undefined, drag: undefined, moving: undefined, undo: [] };
 const confirmReset = { armed: false };
 
+const showLinkCount = () => {
+  const count = (layout.links || []).length;
+  $("links").hidden = count === 0;
+  $("links").textContent = ($("links").getAttribute("aria-pressed") === "true" ? "Hide" : "Show") + " " + count + " code link" + (count === 1 ? "" : "s");
+};
 const catalog = () => BLKCCanvas.FURNITURE;
 const inRoom = (room, x, y) => x >= room.x && y >= room.y && x < room.x + room.w && y < room.y + room.h;
 const roomAt = (x, y) => layout.rooms.find((room) => inRoom(room, x, y));
@@ -589,6 +594,17 @@ async function start() {
       render(true);
     };
   }
+  $("links").onclick = () => {
+    const on = $("links").getAttribute("aria-pressed") !== "true";
+    $("links").setAttribute("aria-pressed", String(on));
+    office.setLinksVisible(on);
+    try { localStorage.setItem("blkc-links", on ? "on" : "off"); } catch { /* it just won't be remembered */ }
+    showLinkCount();
+  };
+  try {
+    if (localStorage.getItem("blkc-links") === "off") { $("links").setAttribute("aria-pressed", "false"); office.setLinksVisible(false); }
+  } catch { /* on by default */ }
+  showLinkCount();
   $("zoom-in").onclick = () => office.zoom(1.4);
   $("zoom-out").onclick = () => office.zoom(1 / 1.4);
   $("zoom-fit").onclick = () => office.zoom();
@@ -614,6 +630,8 @@ async function start() {
       }
       layout = next.scene;
       office.setLayout(layout);
+      office.setLinksVisible($("links").getAttribute("aria-pressed") === "true");
+      showLinkCount();
       fit();
     }
     render();

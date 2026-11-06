@@ -61,7 +61,7 @@ export const OFFICE_HTML = `<!doctype html>
 <body>
 <div id="stage">
   <canvas id="office" role="img" aria-label="The office. The same agents and quests are listed in the panel."></canvas>
-  <div id="hud"><span class="pill" id="level"></span><button class="btn" id="zoom-in" aria-label="Zoom in">+</button><button class="btn" id="zoom-out" aria-label="Zoom out">-</button><button class="btn" id="zoom-fit" aria-label="Fit the whole map">Fit</button></div>
+  <div id="hud"><span class="pill" id="level"></span><button class="btn" id="links" hidden aria-pressed="true" title="Lines show which parts of your code depend on which, along the route between their rooms. They move towards what is depended on."></button><button class="btn" id="zoom-in" aria-label="Zoom in">+</button><button class="btn" id="zoom-out" aria-label="Zoom out">-</button><button class="btn" id="zoom-fit" aria-label="Fit the whole map">Fit</button></div>
   <div id="toasts" aria-live="polite"></div>
   <div id="hint" hidden></div>
 </div>

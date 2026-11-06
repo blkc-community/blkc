@@ -14,6 +14,7 @@ import type { OfficeScene } from "./types.js";
 
 export { createOffice } from "./office.js";
 export { registerPainter, type Painter } from "./draw.js";
+export { drawLinks, linkRoutes, type LinkRoute } from "./links.js";
 export { registerWorld, type ItemSpec, type WorldData } from "./pack.js";
 export type { OfficeHandle, OfficeOptions } from "./office.js";
 export * from "./types.js";

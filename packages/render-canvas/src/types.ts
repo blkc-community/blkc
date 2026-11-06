@@ -38,12 +38,17 @@ export interface OfficeAgent {
 }
 export interface OfficeTask { title: string; state?: TaskState; agent?: string }
 
+/** `from` depends on `to`. */
+export interface OfficeLink { from: string; to: string }
+
 export interface OfficeLayout {
   cols?: number;
   rows?: number;
   rooms?: OfficeRoom[];
   doors?: OfficeDoor[];
   furniture?: OfficeFurniture[];
+  /** How the rooms' code depends on each other. Drawn as lines between them. */
+  links?: OfficeLink[];
 }
 
 export interface OfficeScene extends OfficeLayout {
