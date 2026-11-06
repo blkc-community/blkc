@@ -241,7 +241,7 @@ export function createOffice(canvas: HTMLCanvasElement, scene: OfficeScene = {},
     select,
     tileAt,
     setOverlay(draw) { overlay = draw; },
-    setLinksVisible(on) { world.showLinks = on; },
+    setLinksVisible(on) { world.showLinks = on; if (still) paint(); },
     setInteractive(on) { interactive = on; drag = undefined; if (!on) canvas.style.cursor = "crosshair"; },
     zoom,
     destroy() {
