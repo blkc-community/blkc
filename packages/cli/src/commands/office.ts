@@ -13,9 +13,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { AGENT_STATES, nextTask, normalizeState, removeAgent, serveOverStdio, setAgent } from "@blkc-code/agents";
-import { PROJECT_CLIENTS, HOOK_FILE, codexCommand, connectClient, disconnectClient, manualSettings } from "@blkc-code/connect";
+import { PROJECT_CLIENTS, HOOK_FILE, codexCommand, connectClient, disconnectClient, hermesSettings, manualSettings } from "@blkc-code/connect";
 import { VERSION } from "../version.js";
-import { STATE_FILE, areaForFile, evolveKitMap, kitStore, readMap, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
+import { STATE_FILE, areaForFile, evolveKitMap, kitStore, projectRoot, readMap, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
 
 /** Start with an empty office the first time, so the sample team isn't mixed in with real agents. */
 async function startEmpty(kitDir: string): Promise<boolean> {
@@ -53,7 +53,7 @@ export function registerOfficeCommand(program: Command): void {
         const kit = await resolveKit(options.kit, process.cwd());
         await serveOverStdio(kitStore(kit), {
           version: VERSION,
-          areaForFile: (file) => areaForFile(kit, process.cwd(), file),
+          areaForFile: (file) => areaForFile(kit, projectRoot(kit, process.cwd()), file),
           banner: `BLKC office MCP server: ${path.basename(kit)}`,
         });
       } catch (error) {
@@ -71,7 +71,7 @@ export function registerOfficeCommand(program: Command): void {
     .action(async (agent: string, state: string, options: { task?: string; role?: string; file?: string; kit?: string }) => {
       try {
         const kit = await resolveKit(options.kit, process.cwd());
-        const area = options.file ? await areaForFile(kit, process.cwd(), options.file) : undefined;
+        const area = options.file ? await areaForFile(kit, projectRoot(kit, process.cwd()), options.file) : undefined;
         await updateOfficeState(kit, (current) => {
           const me = setAgent(current, { name: agent, state, task: options.task ?? "", ...(options.role ? { role: options.role } : {}) });
           if (area) me.area = area;
@@ -116,16 +116,18 @@ export function registerOfficeCommand(program: Command): void {
     .option("--kit <path>", "The Kit, if there is more than one")
     .action(async (options: { reset?: boolean; seed?: string; freeze?: boolean; follow?: boolean; kit?: string }) => {
       try {
-        const root = process.cwd();
-        const kit = await resolveKit(options.kit, root);
+        const kit = await resolveKit(options.kit, process.cwd());
+        const root = projectRoot(kit, process.cwd());
         if (options.freeze || options.follow) {
           const current = await readMap(kit);
           if (current) await writeMap(kit, { ...current, evolve: Boolean(options.follow) });
         }
-        const { map, changes } = await evolveKitMap(kit, root, { reset: options.reset, seed: options.seed });
+        const { map, changes, omitted } = await evolveKitMap(kit, root, { reset: options.reset, seed: options.seed });
         console.log(`${chalk.green("Map")}: ${map.rooms.length} rooms, ${map.furniture.length} pieces of furniture, ${map.cols}x${map.rows}${map.evolve ? "" : " (frozen)"}`);
         for (const room of map.rooms) console.log(chalk.gray(`  ${room.name}${room.paths[0] ? ` : ${room.paths[0]}` : ""}`));
         for (const change of changes) console.log(change);
+        if (map.links?.length) console.log(chalk.gray(`${map.links.length} links between rooms from your package files, ${map.links.filter((link) => link.door).length} with a door.`));
+        if (omitted > 0) console.log(chalk.yellow(`${omitted} smaller folders aren't on the map; agents working there use the lobby.`));
       } catch (error) {
         fail(error);
       }
@@ -147,25 +149,31 @@ export function registerOfficeCommand(program: Command): void {
 
   office
     .command("connect [agent]")
-    .description("Connect an agent: claude, cursor, vscode, gemini, codex, or other.")
+    .description("Connect an agent: claude, cursor, vscode, gemini, opencode, codex, hermes, or other.")
     .option("--kit <path>", "The Kit, if there is more than one")
     .option("--no-hooks", "Claude Code: use MCP only, without automatic status updates")
     .option("--auto-work", "Claude Code: start the next assigned quest by itself at the end of each turn")
     .action(async (agent: string | undefined, options: { kit?: string; hooks: boolean; autoWork?: boolean }) => {
       try {
-        const root = process.cwd();
-        const kitDir = await resolveKit(options.kit, root);
+        // Settings belong at the top of the repo, wherever this was run from.
+        const root = projectRoot(process.cwd());
+        const kitDir = await resolveKit(options.kit, process.cwd());
         const kit = path.relative(root, kitDir) || ".";
         const name = agent ?? "other";
 
         if (name === "other") {
           printManual(kit);
-          console.log(chalk.gray("\nOr have blkc write the settings: blkc office connect claude|cursor|vscode|gemini|codex"));
+          console.log(chalk.gray("\nOr have blkc write the settings: blkc office connect claude|cursor|vscode|gemini|opencode|codex|hermes"));
+          return;
+        }
+        if (name === "hermes") {
+          console.log("Add this under mcp_servers in ~/.hermes/config.yaml. It applies to every Hermes session on this machine:");
+          console.log(chalk.cyan(hermesSettings(kitDir, root)));
           return;
         }
         if (name === "codex") {
           console.log("Run this to add the office to Codex:");
-          console.log(chalk.cyan(codexCommand(path.resolve(kit))));
+          console.log(chalk.cyan(codexCommand(kitDir)));
           return;
         }
         const result = await connectClient(name, { root, kit, hooks: options.hooks, autoWork: options.autoWork });
@@ -190,7 +198,7 @@ export function registerOfficeCommand(program: Command): void {
     .description("Remove the settings connect wrote.")
     .action(async (agent: string | undefined) => {
       try {
-        const root = process.cwd();
+        const root = projectRoot(process.cwd());
         const names = agent ? [agent] : Object.keys(PROJECT_CLIENTS);
         for (const name of names) {
           if (await disconnectClient(name, root)) console.log(`Disconnected ${PROJECT_CLIENTS[name]?.label}.`);

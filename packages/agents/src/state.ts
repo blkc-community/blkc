@@ -92,11 +92,11 @@ export function removeAgent(state: AgentsState, id: string): boolean {
   return state.agents.length < before;
 }
 
-/** A task for this agent: its own first, then one nobody has taken. Tasks from other agents wait for a person. */
+/** A task for this agent: its own first, then one nobody has taken. Tasks another agent wrote wait for a person, even if assigned. */
 export function nextTask(state: AgentsState, agentId: string, aliases: string[] = []): Task | undefined {
   const mine = [agentId, ...aliases];
-  const trusted = (task: Task): boolean => !task.by || task.by === "user";
-  return state.tasks.find((task) => task.state === "todo" && task.agent !== undefined && mine.includes(task.agent))
+  const trusted = (task: Task): boolean => !task.by || task.by === "user" || mine.includes(task.by);
+  return state.tasks.find((task) => task.state === "todo" && task.agent !== undefined && mine.includes(task.agent) && trusted(task))
     ?? state.tasks.find((task) => task.state === "todo" && task.agent === undefined && trusted(task));
 }
 

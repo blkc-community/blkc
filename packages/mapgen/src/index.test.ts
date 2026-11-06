@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach, beforeEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -186,5 +186,75 @@ describe("roomForPath", () => {
     expect(roomForPath(rooms, "src/x.ts")).toBe("src");
     expect(roomForPath(rooms, "src\\api\\win.ts")).toBe("api");
     expect(roomForPath(rooms, "other/x.ts")).toBeUndefined();
+  });
+});
+
+describe("a monorepo", () => {
+  let root: string;
+  beforeEach(() => { root = mkdtempSync(path.join(tmpdir(), "blkc-mono-")); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  const write = (file: string, content = "x"): void => {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), content);
+  };
+  const pkg = (dir: string, name: string, deps: string[] = []): void =>
+    write(`${dir}/package.json`, JSON.stringify({ name, dependencies: Object.fromEntries(deps.map((d) => [d, "*"])) }));
+
+  it("reads links from package files, and ranks a shared package over a big unused folder", () => {
+    pkg("packages/ui", "@acme/ui");
+    pkg("packages/db", "@acme/db");
+    pkg("apps/web", "web", ["@acme/ui", "@acme/db"]);
+    pkg("apps/admin", "admin", ["@acme/ui"]);
+    for (let i = 0; i < 300; i++) write(`_tooling/f${i}.md`);
+    const scan = scanProject(root);
+    expect(scan.links).toContainEqual({ from: "apps-web", to: "packages-ui" });
+    expect(scan.areas.find((a) => a.id === "packages-ui")?.dependents).toBe(2);
+    expect(scan.areas[0]?.id).toBe("packages-ui");
+    expect(scan.areas.findIndex((a) => a.id === "packages-db")).toBeLessThan(scan.areas.findIndex((a) => a.id === "tooling"));
+  });
+
+  it("gives linked rooms a door, and every link is reported", () => {
+    pkg("packages/ui", "@acme/ui");
+    pkg("apps/web", "web", ["@acme/ui"]);
+    pkg("apps/admin", "admin", ["@acme/ui"]);
+    const { map } = evolveMap(undefined, scanProject(root), "acme");
+    expect(map.links).toHaveLength(2);
+    expect(map.links?.every((link) => link.door)).toBe(true);
+    assertPlayable(map);
+  });
+
+  it("opens folders named by a workspace config", () => {
+    write("package.json", JSON.stringify({ workspaces: ["tools/*"] }));
+    pkg("tools/a", "a");
+    pkg("tools/b", "b");
+    expect(scanProject(root).areas.map((a) => a.path).sort()).toEqual(["tools/a/", "tools/b/"]);
+    rmSync(path.join(root, "package.json"));
+    write("pnpm-workspace.yaml", "packages:\n  - 'tools/*'\n");
+    expect(scanProject(root).areas.map((a) => a.path).sort()).toEqual(["tools/a/", "tools/b/"]);
+  });
+
+  it("skips gitignored folders and other repos", () => {
+    write(".gitignore", "external/\n");
+    write("external/thing/a.ts");
+    write("src/a.ts");
+    write("nested/.git/HEAD");
+    write("nested/a.ts");
+    expect(scanProject(root).areas.map((a) => a.path)).toEqual(["src/"]);
+  });
+
+  it("fits more than 14 folders, and says how many it left out", () => {
+    for (let i = 0; i < 26; i++) write(`packages/p${i}/a.ts`);
+    const scan = scanProject(root);
+    expect(scan.areas).toHaveLength(20);
+    expect(scan.omitted).toBe(6);
+    const { map } = evolveMap(undefined, scan, "big");
+    expect(map.rooms.filter((r) => !r.role).length).toBeGreaterThan(14);
+    assertPlayable(map);
+  });
+
+  it("gives a room the look of its own name, not its parent's", () => {
+    const { map } = evolveMap(undefined, { areas: [{ id: "apps-api", name: "Api", path: "apps/api/", files: 5 }], rootFiles: 0 }, "x");
+    expect(map.rooms.find((r) => r.id === "apps-api")?.floor).toBe("concrete");
   });
 });

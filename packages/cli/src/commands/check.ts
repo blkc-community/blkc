@@ -13,6 +13,7 @@ import { Command } from "commander";
 import { existsSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { gitignoredNames, isOwnRepo } from "@blkc-code/mapgen";
 import {
   parseAny,
   parseAnyKit,
@@ -58,7 +59,7 @@ async function isJsonSchema(file: string): Promise<boolean> {
   }
 }
 
-async function walkManifests(root: string): Promise<string[]> {
+async function walkManifests(root: string, ignored = gitignoredNames(root)): Promise<string[]> {
   const found: string[] = [];
   let entries;
   try {
@@ -72,7 +73,9 @@ async function walkManifests(root: string): Promise<string[]> {
     if (SKIPPED_FOLDERS.has(entry.name) || entry.name.startsWith(".") || entry.name.endsWith(".lock")) continue;
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      found.push(...(await walkManifests(full)));
+      // Gitignored folders and other repos aren't this project's to check or preview.
+      if (ignored.has(entry.name) || isOwnRepo(full)) continue;
+      found.push(...(await walkManifests(full, ignored)));
     } else if (entry.isFile() && (MANIFEST_NAMES.includes(entry.name) || isCompanion(full)) && !(await isJsonSchema(full))) {
       found.push(full);
     }

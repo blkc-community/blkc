@@ -9,15 +9,17 @@
  * see is always the files as saved.
  */
 
+/* global fetch, AbortSignal */
 import chalk from "chalk";
 import { Command } from "commander";
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { FSWatcher, watch } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { createServer, IncomingMessage, Server, ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { URL } from "node:url";
@@ -31,8 +33,8 @@ import { SHELL_HTML, SHELL_JS } from "./dev-shell.js";
 import { findComponentFile, syncLocalBlocks, type LocalBlock } from "./local-blocks.js";
 import { OFFICE_HTML, OFFICE_JS } from "../office/app.js";
 import { MAX_STATE_BYTES, diffEvents, normalizeState, type AgentsState } from "@blkc-code/agents";
-import type { OfficeMap } from "@blkc-code/mapgen";
-import { STATE_FILE, MAP_FILE, evolveKitMap, findOfficeBlock, findOfficeKits, readMap, readOfficeState, updateOfficeState, writeMap } from "../office/state.js";
+import { hashText, type OfficeMap } from "@blkc-code/mapgen";
+import { STATE_FILE, MAP_FILE, evolveKitMap, findOfficeBlock, findOfficeKits, projectRoot, readMap, readOfficeState, updateOfficeState, writeMap } from "../office/state.js";
 
 const DEFAULT_PORT = 4173;
 const PORT_ATTEMPTS = 20;
@@ -486,6 +488,26 @@ interface DevOptions {
   notify: boolean;
 }
 
+// One project, one server. The record sits outside the project so it never shows up in git.
+const serverRecord = (root: string): string => path.join(tmpdir(), `blkc-dev-${hashText(path.resolve(root))}.json`);
+
+export const recordServer = (root: string, port: number): Promise<void> =>
+  writeFile(serverRecord(root), JSON.stringify({ pid: process.pid, port }));
+
+export const forgetServer = (root: string): Promise<void> => rm(serverRecord(root), { force: true });
+
+/** The port of a server already running for this project, if it is really still there. */
+export async function runningServer(root: string): Promise<number | undefined> {
+  try {
+    const { pid, port } = JSON.parse(await readFile(serverRecord(root), "utf8")) as { pid: number; port: number };
+    process.kill(pid, 0);
+    const reply = await fetch(`http://localhost:${port}/api/state`, { signal: AbortSignal.timeout(1500) });
+    return reply.ok ? port : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function registerDevCommand(program: Command): void {
   program
     .command("dev [path]")
@@ -494,7 +516,10 @@ export function registerDevCommand(program: Command): void {
     .option("--no-open", "Don't open a browser")
     .option("--no-notify", "No desktop notifications when an agent is stuck or finishes")
     .action(async (target: string | undefined, options: DevOptions) => {
-      const root = path.resolve(process.cwd(), target ?? ".");
+      // With no path, a repo with an office has one server at the top, from any folder in it.
+      const top = projectRoot(process.cwd());
+      const useTop = target === undefined && top !== process.cwd() && (await findOfficeKits(top)).length > 0;
+      const root = useTop ? top : path.resolve(process.cwd(), target ?? ".");
       const port = options.port === undefined ? DEFAULT_PORT : Number(options.port);
       if (!Number.isInteger(port) || port < 0 || port > 65535) {
         console.error(chalk.red(`--port must be a number from 0 to 65535, not ${options.port}.`));
@@ -517,6 +542,17 @@ export function registerDevCommand(program: Command): void {
         return;
       }
 
+      if (options.port === undefined) {
+        const running = await runningServer(root);
+        if (running !== undefined) {
+          const url = `http://localhost:${running}`;
+          console.log(`${chalk.green("Already running")} for this project: ${url}`);
+          console.log(chalk.gray("Use --port to start a second one anyway."));
+          if (options.open) openBrowser((await findOfficeKits(root)).length > 0 ? `${url}/office` : url);
+          return;
+        }
+      }
+
       let dev: DevServer;
       try {
         dev = await startDevServer(root, port, options.port !== undefined, { notify: options.notify });
@@ -527,6 +563,7 @@ export function registerDevCommand(program: Command): void {
         return;
       }
 
+      await recordServer(root, dev.port).catch(() => undefined);
       const url = `http://localhost:${dev.port}`;
       const hasOffice = (await findOfficeKits(root)).length > 0;
       console.log(`${chalk.green("BLKC dev")}  ${url}`);
@@ -535,7 +572,7 @@ export function registerDevCommand(program: Command): void {
       if (options.open) openBrowser(hasOffice ? `${url}/office` : url);
       const stop = (): void => {
         dev.close();
-        process.exit(0);
+        void forgetServer(root).finally(() => process.exit(0));
       };
       process.on("SIGINT", stop);
       process.on("SIGTERM", stop);

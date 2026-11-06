@@ -22,11 +22,12 @@ const SYNC_EVENTS = new Set(["SessionStart", "UserPromptSubmit"]);
 type Json = Record<string, unknown>;
 
 /** Agents whose settings file lives in the project, so we can write it. */
-export const PROJECT_CLIENTS: Record<string, { label: string; file: string; key: string; kitPrefix: string; extra?: Json }> = {
+export const PROJECT_CLIENTS: Record<string, { label: string; file: string; key: string; kitPrefix: string; extra?: Json; entry?: (args: string[]) => Json }> = {
   claude: { label: "Claude Code", file: ".mcp.json", key: "mcpServers", kitPrefix: "" },
   cursor: { label: "Cursor", file: ".cursor/mcp.json", key: "mcpServers", kitPrefix: "${workspaceFolder}/" },
   vscode: { label: "VS Code", file: ".vscode/mcp.json", key: "servers", kitPrefix: "${workspaceFolder}/", extra: { type: "stdio" } },
   gemini: { label: "Gemini CLI", file: ".gemini/settings.json", key: "mcpServers", kitPrefix: "" },
+  opencode: { label: "OpenCode", file: "opencode.json", key: "mcp", kitPrefix: "", entry: (args) => ({ type: "local", command: ["npx", ...args], enabled: true }) },
 };
 
 export const mcpArgs = (kit: string): string[] => ["-y", "@blkc-code/cli@latest", "office", "mcp", "--kit", kit];
@@ -36,6 +37,10 @@ export const manualSettings = (kit: string): Json => ({ [SERVER_NAME]: { command
 
 /** Codex keeps its servers in the user's home folder, which isn't ours to edit. */
 export const codexCommand = (kit: string): string => `codex mcp add ${SERVER_NAME} -- npx ${mcpArgs(kit).join(" ")}`;
+
+/** Hermes keeps its servers in ~/.hermes/config.yaml, which isn't ours to edit either. Goes under mcp_servers. */
+export const hermesSettings = (kit: string, root: string): string =>
+  `  ${SERVER_NAME}:\n    command: "npx"\n    args: ${JSON.stringify(mcpArgs(kit))}\n    cwd: ${JSON.stringify(root)}`;
 
 async function readConfig(file: string): Promise<Json> {
   let content: string;
@@ -89,7 +94,7 @@ export interface ConnectOptions {
 /** Write one agent's settings. Throws for an agent with no settings in the project. */
 export async function connectClient(name: string, options: ConnectOptions): Promise<{ label: string; file: string; hooks: boolean }> {
   const client = PROJECT_CLIENTS[name];
-  if (!client) throw new Error(`Unknown agent "${name}". Use claude, cursor, vscode, gemini, codex or other.`);
+  if (!client) throw new Error(`Unknown agent "${name}". Use claude, cursor, vscode, gemini, opencode, codex, hermes or other.`);
   const file = path.join(options.root, client.file);
   const config = await readConfig(file);
   const hooks = name === "claude" && options.hooks !== false;
@@ -97,7 +102,8 @@ export async function connectClient(name: string, options: ConnectOptions): Prom
   if (hooks) await setHooks(options.root, true, Boolean(options.autoWork));
 
   const servers = (config[client.key] ?? {}) as Json;
-  servers[SERVER_NAME] = { ...client.extra, command: "npx", args: mcpArgs(client.kitPrefix + options.kit) };
+  const args = mcpArgs(client.kitPrefix + options.kit);
+  servers[SERVER_NAME] = client.entry ? client.entry(args) : { ...client.extra, command: "npx", args };
   config[client.key] = servers;
   await writeConfig(file, config);
 

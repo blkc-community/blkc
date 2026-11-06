@@ -56,8 +56,9 @@ Any agent on your machine can join. Nothing here is tied to one vendor:
 
 ```bash
 npx @blkc-code/cli@latest office connect claude   # MCP, plus automatic updates through hooks
-npx @blkc-code/cli@latest office connect cursor   # or vscode, or gemini: MCP
+npx @blkc-code/cli@latest office connect cursor   # or vscode, gemini, or opencode: MCP
 npx @blkc-code/cli@latest office connect codex    # prints the command to add the MCP server
+npx @blkc-code/cli@latest office connect hermes   # prints the settings for ~/.hermes/config.yaml
 npx @blkc-code/cli@latest office connect other    # prints the settings for any other MCP agent
 ```
 
