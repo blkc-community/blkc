@@ -25,12 +25,13 @@ import {
   BoardV2Schema,
   PageV2Schema,
   ThemeV2Schema,
+  WorldConfigSchema,
 } from "@blkc-code/core";
 
 const MANIFEST_NAMES = ["block.json", "kit.json", "circuit.json", "manifest.json"];
 const SKIPPED_FOLDERS = new Set(["node_modules", "dist", "coverage"]);
 
-type FileKind = "block" | "kit" | "circuit" | "theme" | "page" | "board";
+type FileKind = "block" | "kit" | "circuit" | "theme" | "world" | "page" | "board";
 
 async function isDir(p: string): Promise<boolean> {
   try { return (await stat(p)).isDirectory(); } catch { return false; }
@@ -39,7 +40,7 @@ async function isDir(p: string): Promise<boolean> {
 /** D4 companions: only validated when they sit next to the manifest that owns them. */
 function isCompanion(file: string): boolean {
   const dir = path.dirname(file);
-  if (path.basename(file) === "theme.json") return existsSync(path.join(dir, "kit.json"));
+  if (path.basename(file) === "theme.json" || path.basename(file) === "world.json") return existsSync(path.join(dir, "kit.json"));
   if (!file.endsWith(".json")) return false;
   if (path.basename(dir) === "pages") return existsSync(path.join(dir, "..", "kit.json"));
   if (path.basename(dir) === "boards") return existsSync(path.join(dir, "..", "circuit.json"));
@@ -108,6 +109,7 @@ export function kindOf(file: string): FileKind {
   if (base === "circuit.json") return "circuit";
   if (base === "block.json") return "block";
   if (base === "theme.json") return "theme";
+  if (base === "world.json") return "world";
   if (path.basename(path.dirname(file)) === "pages") return "page";
   if (path.basename(path.dirname(file)) === "boards") return "board";
   // manifest.json: infer from path
@@ -178,8 +180,8 @@ export async function validateOne(file: string): Promise<FileResult> {
   const issues: CheckIssue[] = [];
   let upgraded = false;
   try {
-    if (kind === "theme" || kind === "page" || kind === "board") {
-      const schema = kind === "theme" ? ThemeV2Schema : kind === "page" ? PageV2Schema : BoardV2Schema;
+    if (kind === "theme" || kind === "world" || kind === "page" || kind === "board") {
+      const schema = kind === "theme" ? ThemeV2Schema : kind === "world" ? WorldConfigSchema : kind === "page" ? PageV2Schema : BoardV2Schema;
       const result = schema.safeParse(raw);
       if (!result.success) throw manifestErrorFrom(result.error.issues);
       if (kind === "page") {

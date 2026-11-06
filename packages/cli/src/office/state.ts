@@ -7,11 +7,25 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createFileStore, type AgentStore, type AgentsState } from "@blkc-code/agents";
-import { evolveMap, roomForPath, scanProject, type OfficeMap } from "@blkc-code/mapgen";
+import { evolveMap, roomForPath, scanProject, type OfficeMap, type ScanOptions } from "@blkc-code/mapgen";
+import { WorldConfigSchema } from "@blkc-code/core";
 import { discover } from "../commands/check.js";
 
 export const STATE_FILE = "office-state.json";
 export const MAP_FILE = "office-map.json";
+export const WORLD_FILE = "world.json";
+
+/** How this Kit reads the project. A broken file is reported by `blkc check`, and ignored here. */
+export function readWorldConfig(kitDir: string): ScanOptions {
+  const parsed = WorldConfigSchema.safeParse(readJsonSync(path.join(kitDir, WORLD_FILE)) ?? {});
+  if (!parsed.success) return {};
+  const { applications, include, ignore } = parsed.data;
+  return {
+    ...(applications ? { markers: applications.markers, replaceDefaults: applications.replaceDefaults } : {}),
+    ...(include ? { include } : {}),
+    ...(ignore ? { ignore } : {}),
+  };
+}
 
 type Json = Record<string, unknown>;
 
@@ -125,7 +139,7 @@ export async function writeMap(kitDir: string, map: OfficeMap): Promise<void> {
 export async function evolveKitMap(kitDir: string, root: string, options: { reset?: boolean; seed?: string } = {}): Promise<{ map: OfficeMap; changes: string[]; wrote: boolean; omitted: number }> {
   const previous = options.reset ? undefined : await readMap(kitDir);
   if (previous && previous.evolve === false) return { map: previous, changes: [], wrote: false, omitted: 0 };
-  const scan = scanProject(root);
+  const scan = scanProject(root, readWorldConfig(kitDir));
   const { map, changes } = evolveMap(previous, scan, options.seed ?? previous?.seed ?? projectSeed(root));
   const same = previous && JSON.stringify(previous) === JSON.stringify(map);
   if (!same) await writeMap(kitDir, map);

@@ -25,6 +25,7 @@ const schemas = {
   "circuit-v2.json": core.CircuitV2Schema,
   "theme.json": core.ThemeSchema,
   "theme-v2.json": core.ThemeV2Schema,
+  "world.json": core.WorldConfigSchema,
   "page.json": core.KitPageSchema,
   "page-v2.json": core.PageV2Schema,
   "board.json": core.BoardTemplateSchema,
