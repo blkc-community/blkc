@@ -37,6 +37,7 @@ import {
 } from "./types.js";
 import * as utils from "./utils.js";
 import { ContactBlock, CtaBlock, ServicesBlock, StoryBlock, ValuesBlock } from "./sections.js";
+import { OfficeBlock } from "./office.js";
 import { richTextToHtml, type RichText } from "./richtext.js";
 
 // Re-export types and utilities
@@ -45,6 +46,7 @@ export * from "./utils.js";
 export * from "./sanitize.js";
 export * from "./kit.js";
 export * from "./preview.js";
+export { OfficeBlock, safeJson, type OfficeProps } from "./office.js";
 export { clsx };
 export { richTextToHtml, type RichText };
 
@@ -60,7 +62,7 @@ export { richTextToHtml, type RichText };
  * no CSS at all.
  */
 const HERO_TONE_CLASSES: Record<BlockTone, string> = {
-  default: "bg-background text-foreground",
+  default: "bg-background text-foreground bg-[radial-gradient(60rem_30rem_at_50%_-10%,color-mix(in_srgb,var(--blkc-color-primary,#0066cc)_16%,transparent),transparent)]",
   muted: "bg-muted text-foreground",
   accent: "bg-accent text-accent-foreground",
   inverse: "bg-foreground text-background",
@@ -138,19 +140,19 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
 
   const ctaClass = (variant: "primary" | "secondary" | "outline" = "primary"): string =>
     clsx(
-      "inline-flex items-center justify-center gap-2 rounded-md px-6 py-3 text-base font-semibold transition-colors",
+      "inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-base font-semibold no-underline shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       variant === "secondary"
         ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
         : variant === "outline"
-          ? "border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+          ? "border border-border bg-background text-foreground hover:bg-muted"
           : "bg-primary text-primary-foreground hover:bg-primary/90",
     );
 
   return (
     <section
       className={clsx(
-        "blkc-hero relative flex w-full flex-col justify-center px-4",
+        "blkc-hero relative flex w-full flex-col justify-center px-6",
         scale.section,
         toneClass,
         alignClass,
@@ -176,17 +178,17 @@ function HeroBlock({ props: p, className, style }: BlockProps<HeroProps>): React
 
       <div className={clsx("flex w-full max-w-3xl flex-col", scale.gap)}>
         {eyebrow && (
-          <p className={clsx("font-medium uppercase tracking-wide", scale.eyebrow)}>
+          <p className={clsx("w-fit rounded-full border border-border bg-muted px-3 py-1 font-semibold uppercase tracking-wide", alignment === "center" && "mx-auto", alignment === "right" && "ml-auto", scale.eyebrow)}>
             {eyebrow}
           </p>
         )}
 
-        <h1 className={clsx("font-bold leading-tight tracking-tight", scale.heading)}>
+        <h1 className={clsx("blkc-heading font-bold leading-[1.1] tracking-tight text-balance", scale.heading)}>
           {heading}
         </h1>
 
         {subheading && (
-          <p className={clsx("text-muted-foreground", scale.subheading)}>{subheading}</p>
+          <p className={clsx("text-muted-foreground text-pretty", scale.subheading)}>{subheading}</p>
         )}
 
         {(cta || secondaryCta) && (
@@ -252,7 +254,7 @@ function TextBlock({ props: p, className, style }: BlockProps<TextProps>): React
 
   return (
     <SafeTag
-      className={clsx("blkc-text leading-relaxed", alignClass, className)}
+      className={clsx("blkc-text mx-auto w-full max-w-3xl px-6 py-8 text-lg leading-relaxed text-pretty [&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_p+p]:mt-4", alignClass, className)}
       style={{
         margin,
         padding,
@@ -297,7 +299,7 @@ function ImageBlock({ props: p, className, style }: BlockProps<ImageProps>): Rea
     <img
       src={imageUrl}
       alt={alt}
-      className="blkc-image-img block h-auto max-w-full"
+      className="blkc-image-img block h-auto max-w-full rounded-xl border border-border shadow-md"
       style={{
         width: width || "100%",
         height: height || "auto",
@@ -322,10 +324,10 @@ function ImageBlock({ props: p, className, style }: BlockProps<ImageProps>): Rea
   );
 
   return (
-    <figure className={clsx("blkc-image flex w-full flex-col gap-2", alignClass, className)}>
+    <figure className={clsx("blkc-image flex w-full max-w-5xl flex-col gap-3 px-6 py-8", alignClass, className)}>
       <div className="blkc-image-wrapper w-full">{content}</div>
       {caption && (
-        <figcaption className="blkc-image-caption text-sm text-muted-foreground">
+        <figcaption className="blkc-image-caption text-center text-sm text-muted-foreground">
           {caption}
         </figcaption>
       )}
@@ -353,24 +355,24 @@ function ButtonBlock({ props: p, className, style }: BlockProps<ButtonProps>): R
   const isExternal = utils.isExternalUrl(hrefUrl);
 
   const sizeClass =
-    size === "sm" ? "px-3 py-1.5 text-sm" : size === "lg" ? "px-6 py-3 text-lg" : "px-4 py-2 text-base";
+    size === "sm" ? "px-3 py-1.5 text-sm" : size === "lg" ? "px-7 py-3.5 text-lg" : "px-5 py-2.5 text-base";
   const variantClass =
     variant === "secondary"
       ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
       : variant === "outline"
-        ? "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+        ? "border border-border bg-background text-foreground hover:bg-muted"
         : variant === "ghost"
-          ? "hover:bg-accent hover:text-accent-foreground"
+          ? "text-foreground hover:bg-muted"
           : variant === "link"
             ? "text-primary underline-offset-4 hover:underline"
             : "bg-primary text-primary-foreground hover:bg-primary/90";
 
   return (
-    <div className={clsx("flex", alignment === "left" ? "justify-start" : alignment === "right" ? "justify-end" : "justify-center")}>
+    <div className={clsx("flex px-6 py-4", alignment === "left" ? "justify-start" : alignment === "right" ? "justify-end" : "justify-center")}>
       <a
         href={hrefUrl || "#"}
         className={clsx(
-          "blkc-button inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+          "blkc-button inline-flex items-center justify-center gap-2 rounded-lg font-semibold no-underline shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
           sizeClass,
           variantClass,
           className,
@@ -411,7 +413,7 @@ function SectionBlock({ props: p, className, style, children }: BlockProps<Secti
   return (
     <section
       className={clsx(
-        "blkc-section text-foreground",
+        "blkc-section text-foreground", !padding && "px-6 py-16",
         widthClass,
         alignment === "wide" && "mx-auto",
         className
@@ -426,6 +428,10 @@ function SectionBlock({ props: p, className, style, children }: BlockProps<Secti
       }}
     >
       <div className="blkc-section-content mx-auto flex w-full max-w-blkc flex-col gap-6">
+        {p.heading && <h2 className="blkc-heading text-3xl font-bold tracking-tight text-balance sm:text-4xl">{p.heading}</h2>}
+        {p.content && (
+          <div className="max-w-3xl text-lg leading-relaxed text-muted-foreground" dangerouslySetInnerHTML={{ __html: richTextToHtml(p.content as RichText) }} />
+        )}
         {children}
       </div>
     </section>
@@ -490,6 +496,7 @@ registerBlock("story", StoryBlock as unknown as BlockComponent);
 registerBlock("values", ValuesBlock as unknown as BlockComponent);
 registerBlock("cta", CtaBlock as unknown as BlockComponent);
 registerBlock("contact", ContactBlock as unknown as BlockComponent);
+registerBlock("office", OfficeBlock as unknown as BlockComponent);
 
 // ============================================================================
 // Render Functions

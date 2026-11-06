@@ -125,7 +125,7 @@ describe("content", () => {
       secondaryCta: { label: "See the menu", href: "/menu" },
     });
 
-    expect(html).toContain("border-input");
+    expect(html).toContain("border-border");
   });
 });
 

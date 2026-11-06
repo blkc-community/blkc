@@ -370,7 +370,7 @@ function normalizeUrl(url?: string): string | undefined {
   if (!url) return undefined;
   
   // Add protocol if missing
-  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("/") && !url.startsWith("#") && !url.startsWith("mailto:") && !url.startsWith("tel:")) {
+  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("/") && !url.startsWith("#") && !url.startsWith("mailto:") && !url.startsWith("tel:") && !url.startsWith("data:image/")) {
     return `https://${url}`;
   }
   

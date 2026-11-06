@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/cli",
-    "build:all": "npm run build --if-present -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/cli",
+    "build": "npm run build -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/cli",
+    "build:all": "npm run build --if-present -w @blkc-code/core -w @blkc-code/tailwind-preset -w @blkc-code/logbook -w @blkc-code/render-web -w @blkc-code/render-canvas -w @blkc-code/cli",
     "test": "npm run test --workspaces",
     "test:all": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces",

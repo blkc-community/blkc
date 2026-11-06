@@ -20,6 +20,10 @@ npx @blkc-code/cli@latest dev
 shows any errors in the page. It previews every Block, Kit and Circuit in the folder. Use
 `--port` to pick a port and `--no-open` to skip opening the browser.
 
+### Canvas Blocks
+
+The `office` Block draws a living pixel-art office in a canvas, from JSON. People walk, work and react to their status, and tasks become quests. See [Pixel Office](https://github.com/blkc-community/kits/tree/main/pixel-office) for how to change it. On your own page, render it with `@blkc-code/render-web`, then call `mountCanvasBlocks()` from `@blkc-code/render-canvas`. `registerCanvasBlock()` adds other kinds.
+
 ### Make something your own
 
 Blocks, Kits and Circuits can all be forked. `--from` copies one into your project under a new name, and `blkc dev` shows it:

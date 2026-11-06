@@ -7,11 +7,11 @@
   --color-secondary-foreground: var(--blkc-color-background, #ffffff);
   --color-background: var(--blkc-color-background, #ffffff);
   --color-foreground: var(--blkc-color-text, #1a1a1a);
-  --color-muted: var(--blkc-color-background, #ffffff);
+  --color-muted: var(--blkc-color-surface, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 6%, var(--blkc-color-background, #ffffff)));
   --color-muted-foreground: var(--blkc-color-text-secondary, #6c757d);
-  --color-border: var(--blkc-color-border, #e0e0e0);
-  --color-input: var(--blkc-color-border, #e0e0e0);
-  --color-accent: var(--blkc-color-primary, #0066cc);
+  --color-border: var(--blkc-color-border, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff)));
+  --color-input: var(--blkc-color-border, color-mix(in srgb, var(--blkc-color-text, #1a1a1a) 16%, var(--blkc-color-background, #ffffff)));
+  --color-accent: var(--blkc-color-accent, var(--blkc-color-primary, #0066cc));
   --color-accent-foreground: var(--blkc-color-background, #ffffff);
   --color-ring: var(--blkc-color-primary, #0066cc);
   --radius-blkc: var(--blkc-border-radius, 8px);

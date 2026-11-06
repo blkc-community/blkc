@@ -1,0 +1,45 @@
+{
+  "name": "@blkc-code/render-canvas",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Canvas renderer for BLKC: draws canvas Blocks such as the Pixel Office",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runtime.js": "./dist/runtime.js",
+    "./runtime.txt": "./dist/runtime.txt"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "scripts": {
+    "build": "tsc && esbuild src/runtime.ts --bundle --minify --format=iife --target=es2020 --outfile=dist/runtime.js && cp dist/runtime.js dist/runtime.txt",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": ["blkc", "canvas", "pixel-art", "renderer"],
+  "author": "Black Code Enterprises LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blkc-community/blkc.git",
+    "directory": "packages/render-canvas"
+  }
+}
