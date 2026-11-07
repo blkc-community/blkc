@@ -7,7 +7,7 @@
 import { Buffer } from "node:buffer";
 import { mkdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { setTimeout as wait } from "node:timers/promises";
-import { MAX_STATE_BYTES, normalizeState, type AgentsState } from "./state.js";
+import { MAX_STATE_BYTES, normalizeState, sweepStale, type AgentsState } from "./state.js";
 
 export interface AgentStore {
   read(): Promise<AgentsState>;
@@ -21,9 +21,9 @@ const LOCK_STALE_MS = 5000;
 export function createFileStore(file: string, fallback?: () => unknown): AgentStore {
   const read = async (): Promise<AgentsState> => {
     try {
-      return normalizeState(JSON.parse(await readFile(file, "utf8")));
+      return sweepStale(normalizeState(JSON.parse(await readFile(file, "utf8"))));
     } catch {
-      return normalizeState(fallback?.());
+      return sweepStale(normalizeState(fallback?.()));
     }
   };
   return {
@@ -50,7 +50,7 @@ export function createFileStore(file: string, fallback?: () => unknown): AgentSt
         const state = await read();
         const wasDone = new Set(state.tasks.filter((task) => task.state === "done").map((task) => task.title));
         change(state);
-        const next = normalizeState(state);
+        const next = sweepStale(normalizeState(state));
         // Progress counts every task ever finished, so deleting one doesn't lose it.
         next.stats.questsDone += next.tasks.filter((task) => task.state === "done" && !wasDone.has(task.title)).length;
         const body = JSON.stringify(next, null, 2) + "\n";

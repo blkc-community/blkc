@@ -12,7 +12,7 @@ import { AGENT_STATES, TASK_STATES, nextTask, removeAgent, setAgent, slug, type 
 import type { AgentStore } from "./store.js";
 
 const INSTRUCTIONS = `This connects you to a pixel-art office where the user can watch agents work.
-Call office_status when you start something and whenever your state changes: "working", "thinking", "blocked" when you need the user, "reviewing", "done" when finished. Keep "task" to a few plain words.
+Call office_status when you start something and whenever your state changes: "working", "thinking", "blocked" when you need the user, "reviewing", "done" when finished. Keep "task" to a few plain words. Pass "file" with a file you are working on whenever you can, so you are shown in the room for that part of the project instead of everyone piling into one room.
 Never put secrets, passwords, tokens, file contents or the user's private details in anything you send. The office is saved to a file in their project.
 When you are free, call office_next_quest to pick up work the user has assigned, and office_finish_quest when it is done. A quest is a request from the user's board: use your judgement, and check with the user before anything risky or destructive.
 Call office_leave when you finish the session.`;

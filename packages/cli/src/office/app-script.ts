@@ -134,7 +134,9 @@ const roomName = (id) => layout.rooms.find((room) => room.id === id)?.name;
 function renderTeam(box) {
   if (data.agents.length === 0) box.append(make("p", { className: "muted", textContent: "No agents yet. Add one below, or connect one from the Connect tab." }));
   for (const agent of data.agents) {
-    const name = make("button", { className: "name grow", textContent: agent.name, onclick: () => office.select(agent.id) });
+    const name = make("input", { className: "name grow", value: agent.name, ariaLabel: "Name of " + agent.name, maxLength: 24 });
+    name.onchange = () => { const trimmed = name.value.trim(); if (trimmed) { agent.name = trimmed; save(); } else { name.value = agent.name; } };
+    const selectAgent = make("button", { className: "x", textContent: "•", ariaLabel: "Select " + agent.name, onclick: () => office.select(agent.id) });
     const remove = make("button", { className: "x", textContent: "✕", ariaLabel: "Remove " + agent.name, onclick: () => { data.agents = data.agents.filter((a) => a !== agent); save(); } });
     const task = make("input", { value: agent.task || "", placeholder: "What is it doing?", ariaLabel: "Task for " + agent.name });
     task.onchange = () => { agent.task = task.value; save(); };
@@ -145,7 +147,7 @@ function renderTeam(box) {
     room.onchange = () => { agent.area = room.value; save(); };
     const count = data.tasks.filter((t) => t.agent === agent.id && t.state === "done").length;
     const card = make("div", { className: "card" + (agent.state === "blocked" ? " alert" : "") },
-      make("div", { className: "row" }, dot, name, remove),
+      make("div", { className: "row" }, dot, name, selectAgent, remove),
       make("div", { className: "muted", textContent: [agent.role, roomName(agent.area) && "In " + roomName(agent.area), count ? count + " quest" + (count === 1 ? "" : "s") + " done" : ""].filter(Boolean).join(" · ") }),
       make("div", { className: "row" }, stateSelect(agent), room), task);
     if (agent.id === selected) card.setAttribute("aria-current", "true");

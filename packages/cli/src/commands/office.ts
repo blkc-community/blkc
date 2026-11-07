@@ -16,7 +16,7 @@ import { AGENT_STATES, nextTask, normalizeState, removeAgent, serveOverStdio, se
 import { PROJECT_CLIENTS, HOOK_FILE, codexCommand, connectClient, disconnectClient, hermesSettings, manualSettings } from "@blkc-code/connect";
 import { scanTree, type TreeNode } from "@blkc-code/mapgen";
 import { VERSION } from "../version.js";
-import { STATE_FILE, areaForFile, evolveKitMap, kitStore, projectRoot, readMap, readTreeOptions, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
+import { STATE_FILE, areaForFile, evolveKitMap, kitStore, projectRoot, readMap, readOfficeState, readTreeOptions, resolveKit, updateOfficeState, writeMap } from "../office/state.js";
 
 /** Start with an empty office the first time, so the sample team isn't mixed in with real agents. */
 async function startEmpty(kitDir: string): Promise<boolean> {
@@ -174,6 +174,86 @@ export function registerOfficeCommand(program: Command): void {
         const kit = await resolveKit(options.kit, process.cwd());
         await updateOfficeState(kit, (current) => { removeAgent(current, agent); });
         console.log(`${agent} has left.`);
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  office
+    .command("finish <agent> [quest]")
+    .description("Mark an agent's current (or named) quest done. For scripts and agents without MCP.")
+    .option("--kit <path>", "The Kit, if there is more than one")
+    .action(async (agent: string, quest: string | undefined, options: { kit?: string }) => {
+      try {
+        const kit = await resolveKit(options.kit, process.cwd());
+        let finished: string | null = null;
+        await updateOfficeState(kit, (current) => {
+          const me = setAgent(current, { name: agent });
+          let found = quest
+            ? current.tasks.find((t) => t.title.toLowerCase() === quest.toLowerCase())
+            ?? current.tasks[Number(quest) - 1]
+            : current.tasks.find((t) => t.state === "doing" && t.agent === me.id);
+          if (!found) throw new Error("No quest to finish. Name one by title or number, or pick one up first.");
+          if (found.state !== "done") { found.state = "done"; finished = found.title; }
+          me.state = "done";
+          me.task = `Finished: ${found.title}`;
+        });
+        console.log(JSON.stringify({ finished }));
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  office
+    .command("work <agent>")
+    .description("Pick up and finish quests one at a time, for scripts and agents without MCP. Prints each quest as JSON and waits for it to be marked done.")
+    .option("--kit <path>", "The Kit, if there is more than one")
+    .option("--once", "Handle a single quest, then exit")
+    .option("--poll <ms>", "How often to check for completion", "1000")
+    .option("--timeout <seconds>", "Give up waiting after this many seconds", "0")
+    .action(async (agent: string, options: { kit?: string; once?: boolean; poll?: string; timeout?: string }) => {
+      try {
+        const kit = await resolveKit(options.kit, process.cwd());
+        const pollMs = Math.max(250, Number(options.poll) || 1000);
+        const timeoutMs = (Number(options.timeout) || 0) * 1000;
+        const loop = async (): Promise<void> => {
+          while (true) {
+            let picked: { title: string; detail?: string } | undefined;
+            await updateOfficeState(kit, (current) => {
+              const me = setAgent(current, { name: agent });
+              const quest = nextTask(current, me.id);
+              if (!quest) return;
+              quest.state = "doing";
+              quest.agent = me.id;
+              me.state = "working";
+              me.task = quest.title;
+              picked = { title: quest.title, detail: quest.detail ?? "" };
+            });
+            if (!picked) {
+              console.log(JSON.stringify({ quest: null }));
+              return;
+            }
+            console.log(JSON.stringify({ quest: picked, finish: `blkc office finish ${JSON.stringify(agent)}` }));
+            // Wait for the quest to be marked done (by `blkc office finish` or MCP).
+            const started = Date.now();
+            while (true) {
+              if (timeoutMs > 0 && Date.now() - started > timeoutMs) {
+                console.error(chalk.red(`Timed out waiting for ${picked.title} to finish.`));
+                process.exitCode = 1;
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, pollMs));
+              const state = await readOfficeState(kit);
+              const done = state.tasks.find((t) => t.title === picked!.title && t.state === "done");
+              if (done) {
+                console.log(JSON.stringify({ finished: picked.title }));
+                break;
+              }
+            }
+            if (options.once) return;
+          }
+        };
+        await loop();
       } catch (error) {
         fail(error);
       }

@@ -542,3 +542,28 @@ describe("the project's map", () => {
     expect(json("kits/pixel-office/office-map.json").rooms[0].name).toBe("Renamed");
   }, 20000);
 });
+
+describe("blkc office work", () => {
+  const seed = (tasks: unknown[]) => writeFileSync(path.join(dir, STATE), JSON.stringify({ agents: [], tasks }));
+
+  it("picks up a quest, waits for it to be finished, and reports it", async () => {
+    seed([{ title: "Ship it", state: "todo", agent: "bot", by: "user" }]);
+    const proc = spawn(process.execPath, [CLI, "office", "work", "Bot", "--once", "--poll", "200"], { cwd: dir });
+    let out = "";
+    proc.stdout.on("data", (data) => { out += String(data); });
+    await new Promise<void>((resolve) => {
+      const check = () => { if (out.includes("Ship it")) resolve(); else setTimeout(check, 50); };
+      check();
+    });
+    blkc("office", "finish", "Bot");
+    await new Promise<void>((resolve) => proc.on("close", () => resolve()));
+    expect(out).toContain('"quest"');
+    expect(out).toContain('"finished"');
+  }, 10000);
+
+  it("says so when there is nothing to do", () => {
+    seed([]);
+    const r = blkc("office", "work", "Bot", "--once");
+    expect(r.out.trim()).toContain('"quest":null');
+  });
+});

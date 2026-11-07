@@ -516,7 +516,7 @@ const PIXEL_OFFICE_NOTICE = [
 ].join("\n") + "\n";
 
 const PIXEL_OFFICE_TEST = `import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const kit = JSON.parse(readFileSync(new URL("./kit.json", import.meta.url), "utf8"));
@@ -530,6 +530,45 @@ test("every block on a page is declared by the Kit", () => {
   const declared = new Set(kit.blocks.map((block) => block.blockId));
   for (const page of kit.content.pages) {
     for (const { block } of page.blocks) assert.ok(declared.has(block), block);
+  }
+});
+
+test("the office Block carries a team and a quest board", () => {
+  const office = kit.content.pages
+    .flatMap((page) => page.blocks)
+    .find((entry) => entry.block === "office")?.props;
+  assert.ok(office, "no office Block");
+  assert.ok(Array.isArray(office.agents) && office.agents.length > 0, "no agents");
+  assert.ok(Array.isArray(office.tasks) && office.tasks.length > 0, "no tasks");
+  for (const agent of office.agents) {
+    assert.ok(agent.id && agent.name && agent.state, "agent missing fields");
+  }
+  for (const task of office.tasks) {
+    assert.ok(task.title && task.state, "task missing fields");
+  }
+});
+
+test("office-map.json, when present, is a valid map", () => {
+  const mapUrl = new URL("./office-map.json", import.meta.url);
+  if (!existsSync(mapUrl)) return;
+  const map = JSON.parse(readFileSync(mapUrl, "utf8"));
+  assert.equal(map.version, 1);
+  assert.equal(typeof map.seed, "string");
+  assert.equal(typeof map.evolve, "boolean");
+  assert.equal(typeof map.cols, "number");
+  assert.equal(typeof map.rows, "number");
+  for (const key of ["rooms", "doors", "furniture", "log"]) {
+    assert.ok(Array.isArray(map[key]), key + " is not an array");
+  }
+  const roomIds = map.rooms.map((room) => room.id);
+  assert.equal(new Set(roomIds).size, roomIds.length, "duplicate room ids");
+  for (const room of map.rooms) {
+    assert.ok(room.id, "room missing id");
+    assert.equal(typeof room.name, "string", "room name is not a string");
+  }
+  const roomIdSet = new Set(roomIds);
+  for (const item of map.furniture) {
+    if (item.room) assert.ok(roomIdSet.has(item.room), "furniture references unknown room " + item.room);
   }
 });
 `;

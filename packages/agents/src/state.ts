@@ -16,7 +16,7 @@ export const TASK_BOARD = {
   transitions: [],
 } as const;
 
-export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string; area?: string }
+export interface Agent { id: string; name: string; role?: string; state: AgentState; task?: string; area?: string; /** Last time this agent reported in. Used to spot ones that look busy but have gone quiet. */ lastSeen?: string }
 export interface Task {
   title: string;
   state: TaskState;
@@ -56,6 +56,8 @@ export function normalizeState(raw: unknown): AgentsState {
     if (task) agent.task = task;
     const area = text(item["area"], 60);
     if (area) agent.area = area;
+    const lastSeen = text(item["lastSeen"], 40);
+    if (lastSeen && !Number.isNaN(Date.parse(lastSeen))) agent.lastSeen = lastSeen;
     agents.push(agent);
   }
   const tasks: Task[] = [];
@@ -91,7 +93,30 @@ export function setAgent(state: AgentsState, patch: { id?: string; name?: string
     agent.state = patch.state as AgentState;
   }
   if (patch.task !== undefined) agent.task = patch.task;
+  agent.lastSeen = new Date().toISOString();
   return agent;
+}
+
+/** How long an agent can stay quiet before it is assumed away (15 minutes). */
+export const STALE_AFTER_MS = 15 * 60 * 1000;
+
+/** Mark agents that look busy but have gone quiet as "away". Mutates and returns the state. */
+export function sweepStale(state: AgentsState, now: number = Date.now()): AgentsState {
+  const nowIso = new Date(now).toISOString();
+  for (const agent of state.agents) {
+    if (!agent.lastSeen) {
+      // Legacy entry with no timestamp: give it one grace window before we judge it.
+      agent.lastSeen = nowIso;
+      continue;
+    }
+    const seen = Date.parse(agent.lastSeen);
+    if (Number.isNaN(seen)) { agent.lastSeen = nowIso; continue; }
+    if (now - seen <= STALE_AFTER_MS) continue;
+    if (agent.state === "working" || agent.state === "thinking" || agent.state === "blocked" || agent.state === "reviewing") {
+      agent.state = "away";
+    }
+  }
+  return state;
 }
 
 export function removeAgent(state: AgentsState, id: string): boolean {
