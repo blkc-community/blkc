@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/cli",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "type": "module",
   "description": "BLKC developer CLI tools",
   "bin": {

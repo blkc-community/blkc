@@ -295,7 +295,14 @@ describe("the office app", () => {
 
   it("saves a change from its own page, and cleans what it is given", async () => {
     expect(await put(JSON.stringify({ agents: [{ id: "Ada!", name: "Ada", state: "dancing" }], tasks: [{ title: "T", state: "nope" }], extra: "x" }), { "Content-Type": "application/json", Origin: base })).toBe(200);
-    expect(json(STATE)).toEqual({ agents: [{ id: "ada", name: "Ada", state: "idle" }], tasks: [{ title: "T", state: "todo" }], stats: { questsDone: 0 } });
+    const saved = json(STATE);
+    expect(saved.tasks).toEqual([{ title: "T", state: "todo" }]);
+    expect(saved.stats).toEqual({ questsDone: 0 });
+    expect(saved.agents).toHaveLength(1);
+    expect(saved.agents[0].id).toBe("ada");
+    expect(saved.agents[0].name).toBe("Ada");
+    expect(saved.agents[0].state).toBe("idle");
+    expect(typeof saved.agents[0].lastSeen).toBe("string");
   });
 
   it("refuses changes from another site, with no origin, or without JSON", async () => {
