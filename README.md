@@ -239,6 +239,13 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 - **Framework packages** (`@blkc-code/*`): Apache-2.0
 - **Content** (Blocks, Kits, Circuits in separate repos): MIT
 
+## Support
+
+BLKC is built with AI and with humans always in the loop. If it helps you, consider
+sponsoring development:
+
+- [Donate via PayPal](https://www.paypal.com/donate/?hosted_button_id=SZM4MWC3W3VG8)
+
 ## Community
 
 - **GitHub**: [blkc-community](https://github.com/blkc-community)

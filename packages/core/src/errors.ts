@@ -6,6 +6,7 @@
  *   BLKC-E100–E199  schema
  *   BLKC-E200–E299  references and semver
  *   BLKC-E300–E399  capabilities and MCP
+ *   BLKC-E400–E499  logbook
  *
  * Each code carries a title, a cause, a fix and a docs slug so that `blkc check`
  * can print `CODE  file:field  message  → fix  https://blkc.blackcode.space/docs/errors/<code>`.
@@ -56,6 +57,15 @@ export const BLKC_ERROR_CODES: BlkcErrorCode[] = [
   { code: "BLKC-E303", title: "Secret in client bundle", cause: "A secret or ctx.secrets use would reach a client bundle.", fix: "Move the secret to a server-only capability Block.", docsSlug: "e303" },
   { code: "BLKC-E304", title: "Browser-incompatible capability", cause: "A browser-runtime capability Block cannot run in the browser.", fix: "Change runtime to server or remove browser-only constraints.", docsSlug: "e304" },
   { code: "BLKC-E305", title: "HTML export size exceeded", cause: "A browser-runtime capability Block exceeds the html target size budget.", fix: "Use the static or project target instead.", docsSlug: "e305" },
+  // --- E400-E499: logbook ---
+  { code: "BLKC-E400", title: "Logbook line unreadable", cause: "A line in the logbook is not valid JSON or not a valid entry.", fix: "Restore the logbook from a trusted copy; this file has been altered or damaged.", docsSlug: "e400" },
+  { code: "BLKC-E401", title: "Entry hash mismatch", cause: "An entry's content no longer matches its hash, so it was changed after it was written.", fix: "Treat this entry and everything after it as untrusted; restore from a trusted copy.", docsSlug: "e401" },
+  { code: "BLKC-E402", title: "Broken chain", cause: "An entry's prevHash does not match the entry before it, so entries were removed, reordered or inserted.", fix: "Treat the logbook from this line on as untrusted; restore from a trusted copy.", docsSlug: "e402" },
+  { code: "BLKC-E403", title: "Unsigned entry", cause: "Signatures are required but this entry has none.", fix: "Configure a signing key for every writer, or verify without --require-signed.", docsSlug: "e403" },
+  { code: "BLKC-E404", title: "Unknown signing key", cause: "The entry is signed with a key that is not in the trusted keys file.", fix: "Add the writer's public key to the keys file if you trust it.", docsSlug: "e404" },
+  { code: "BLKC-E405", title: "Invalid signature", cause: "The signature does not match the entry, so the entry or the signature was forged or altered.", fix: "Treat this entry as untrusted; restore from a trusted copy.", docsSlug: "e405" },
+  { code: "BLKC-E406", title: "Malformed signature", cause: "The signature is not in the form ed25519:<keyId>:<base64>.", fix: "Re-sign with a current BLKC logbook.", docsSlug: "e406" },
+  { code: "BLKC-E407", title: "Key not allowed for this actor", cause: "The signing key is trusted, but not for the actor named in the entry.", fix: "Check the keys file: each key lists the actor it may sign for.", docsSlug: "e407" },
 ];
 
 export function findErrorCode(code: string): BlkcErrorCode | undefined {

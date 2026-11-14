@@ -48,7 +48,7 @@ describe("the MCP server", () => {
   it("lists its tools and tells agents what to do, including about secrets", async () => {
     const c = await connectMcp();
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_finish_quest", "office_leave", "office_next_quest", "office_status", "office_update_quest", "office_view"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_audit", "office_finish_quest", "office_leave", "office_list_prompts", "office_next_quest", "office_report_verdict", "office_run_tests", "office_status", "office_submit_review", "office_update_quest", "office_view"]);
     expect(c.getInstructions()).toContain("secrets");
   });
 

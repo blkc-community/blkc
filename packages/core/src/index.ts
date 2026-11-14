@@ -12,7 +12,7 @@
 
 import { createHash } from "crypto";
 import { z } from "zod";
-import { manifestErrorFrom } from "./errors.js";
+import { ManifestError, manifestErrorFrom, type ManifestIssue } from "./errors.js";
 
 // ============================================================================
 // Shared Types and Utilities
@@ -269,6 +269,36 @@ export const BlockCapabilitySchema = z.object({
 export type BlockCapability = z.infer<typeof BlockCapabilitySchema>;
 
 // ============================================================================
+// MCP App UI and eval results (marketplace contract, 2026-11-14)
+// ============================================================================
+
+/** An MCP App UI a block ships (`text/html;profile=mcp-app`, rendered by the host in a sandboxed iframe). */
+export const McpAppSchema = z.object({
+  resourceUri: z.string().regex(/^ui:\/\/[A-Za-z0-9._~/-]+$/, "must be a ui:// URI"),
+  title: z.string().min(1),
+});
+export type McpApp = z.infer<typeof McpAppSchema>;
+
+/**
+ * A measured result for a capability block, for example a model-backed block's F1 on a
+ * held-out set. Shown on the block card and used to rank listings.
+ */
+export const EvalResultSchema = z.object({
+  /** What it was measured on, for example "sst2-test-500" or a path to the eval set. */
+  dataset: z.string().min(1),
+  /** The metric's name, for example "f1", "accuracy", "exact-match". */
+  metric: z.string().min(1),
+  score: z.number(),
+  /** The same metric for a baseline (for example a large LLM), for comparison. */
+  baseline: z.object({ name: z.string(), score: z.number() }).optional(),
+  latencyP50Ms: z.number().nonnegative().optional(),
+  /** Cost per 1,000 calls, in US dollars. */
+  costPer1k: z.number().nonnegative().optional(),
+  ranAt: z.string().optional(),
+});
+export type EvalResult = z.infer<typeof EvalResultSchema>;
+
+// ============================================================================
 // Blocks
 // ============================================================================
 
@@ -297,6 +327,8 @@ const blockBaseShape = {
   metrics: z.array(UsageMetricSchema).default([]),
   visibility: z.enum(["public", "private"]).default("public"),
   changelog: z.array(ChangelogEntrySchema).default([]),
+  /** The block ships an MCP App UI: a `ui://` resource a host can render in a sandboxed frame. */
+  mcpApp: McpAppSchema.optional(),
 };
 
 // ---------------------------------------------------------------------------
@@ -329,7 +361,10 @@ export const CapabilityBlockSchema = z.object({
   permissions: CapabilityPermissionsSchema.default({ network: false, secrets: [] }),
   // Reserved (format only, not implemented): runtime placement for AI/gamification.
   placement: z.enum(["server", "browser"]).default("server"),
+  /** Models the block wraps. `source` is where it comes from, for example "hf" (Hugging Face), "local" or "url". */
   models: z.array(z.object({ id: z.string(), source: z.string().optional(), license: z.string().optional() })).default([]),
+  /** Measured results (see EvalResultSchema). */
+  evals: z.array(EvalResultSchema).default([]),
   assets: z.array(z.string()).default([]),
   game: z.object({
     xpCost: z.number().optional(),
@@ -715,6 +750,8 @@ export const CircuitSchema = z.object({
   repository: z.string().url().optional(),
   status: z.enum(["draft", "released", "deprecated"]).default("draft"),
   launchDate: z.string().optional(),
+  /** Outside tools the circuit can work with, for example a Herdr bridge. */
+  integrations: z.array(z.object({ name: z.string().min(1), optional: z.boolean().default(true), description: z.string().optional() })).default([]),
 });
 
 export type CircuitManifest = z.infer<typeof CircuitSchema>;
@@ -927,6 +964,67 @@ export function parseAnyCircuit(input: unknown): ParseAnyResult<CircuitManifest>
   if (!result.success) throw manifestErrorFrom(result.error.issues);
   return { value: result.data, warnings, upgraded };
 }
+// ============================================================================
+// Publishing (marketplace contract, 2026-11-14)
+// ============================================================================
+
+export type PublishableKind = "block" | "kit" | "circuit";
+
+export interface PublishCheck {
+  ok: boolean;
+  errors: ManifestIssue[];
+}
+
+/** An exact semver version: no ranges, no wildcards, no "latest". */
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Stricter than parsing: what a manifest needs before it can be published, so that what
+ * someone installs is exactly what was reviewed.
+ *  - it parses as a v2 manifest of its kind, and declares `manifestVersion: 2` itself
+ *  - it has a version that is exact semver, and a license
+ *  - a block declares its `kind`
+ *  - a circuit pins every Kit and capability Block to an exact version (no ^, ~, ranges or *)
+ */
+export function validatePublishable(kind: PublishableKind, manifest: unknown): PublishCheck {
+  const errors: ManifestIssue[] = [];
+  const raw = (manifest && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
+
+  if (raw["manifestVersion"] !== 2) {
+    errors.push({ code: raw["manifestVersion"] === undefined ? "BLKC-E104" : "BLKC-E105", field: "manifestVersion", message: "Published manifests must declare \"manifestVersion\": 2." });
+  }
+  if (kind === "block" && raw["kind"] === undefined) {
+    errors.push({ code: "BLKC-E106", field: "kind", message: "Published blocks must declare \"kind\": \"ui\" or \"capability\"." });
+  }
+  if (typeof raw["license"] !== "string" || !raw["license"]) {
+    errors.push({ code: "BLKC-E101", field: "license", message: "Published manifests must declare a license." });
+  }
+
+  let parsed: { version?: string; kits?: { kitId: string; version: string }[]; capabilities?: { blockId: string; version: string }[] } | undefined;
+  try {
+    parsed = (kind === "block" ? parseAnyBlock(raw) : kind === "kit" ? parseAnyKit(raw) : parseAnyCircuit(raw)).value as typeof parsed;
+  } catch (error) {
+    if (error instanceof ManifestError) errors.push(...error.issues);
+    else errors.push({ code: "BLKC-E100", field: "", message: error instanceof Error ? error.message : String(error) });
+  }
+
+  if (parsed) {
+    if (!EXACT_VERSION.test(parsed.version ?? "")) {
+      errors.push({ code: "BLKC-E201", field: "version", message: `"${parsed.version}" isn't an exact version like 1.2.3.` });
+    }
+    if (kind === "circuit") {
+      (parsed.kits ?? []).forEach((ref, i) => {
+        if (!EXACT_VERSION.test(ref.version)) errors.push({ code: "BLKC-E201", field: `kits.${i}.version`, message: `Kit "${ref.kitId}" must be pinned to an exact version, not "${ref.version}".` });
+      });
+      (parsed.capabilities ?? []).forEach((ref, i) => {
+        if (!EXACT_VERSION.test(ref.version)) errors.push({ code: "BLKC-E201", field: `capabilities.${i}.version`, message: `Block "${ref.blockId}" must be pinned to an exact version, not "${ref.version}".` });
+      });
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 // ============================================================================
 // Usage + Logbook
 // ============================================================================

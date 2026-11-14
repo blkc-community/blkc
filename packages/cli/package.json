@@ -1,6 +1,6 @@
 {
   "name": "@blkc-code/cli",
-  "version": "0.6.9",
+  "version": "0.7.0",
   "type": "module",
   "description": "BLKC developer CLI tools",
   "bin": {
@@ -22,8 +22,10 @@
   "devDependencies": {
     "@blkc-code/agents": "^0.2.0",
     "@blkc-code/connect": "^0.1.1",
+    "@blkc-code/herdr": "^0.1.0",
     "@blkc-code/core": "^0.2.1",
     "@blkc-code/logbook": "^0.1.4",
+    "@blkc-code/marketplace": "^0.1.0",
     "@blkc-code/mapgen": "^0.6.0",
     "@blkc-code/render-canvas": "^0.7.0",
     "@blkc-code/render-web": "^0.4.1",
