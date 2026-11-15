@@ -38,7 +38,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@blkc-code/core": "^0.2.1"
+    "@blkc-code/core": "^0.2.4"
   },
   "peerDependencies": {
     "react": ">=19.3.0",
