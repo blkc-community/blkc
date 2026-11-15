@@ -268,13 +268,31 @@ function firstWalkable(world: World): { x: number; y: number } {
 
 const NEEDS_DESK: readonly AgentState[] = ["working", "thinking", "blocked"];
 
+/** Room an agent belongs to: the one for the folder it reported, or, when it
+ *  didn't report a folder, one chosen deterministically from the real rooms so
+ *  agents don't all pile into the same room just because they have no file. */
+function roomForAgent(world: World, agent: Agent): Room | undefined {
+  const direct = world.rooms.find((candidate) => candidate.id === agent.area);
+  if (direct) return direct;
+  const rooms = world.rooms.filter((r) =>
+    r.w > 0 && r.h > 0 && r.id &&
+    (r.paths?.length ?? 0) > 0 &&
+    !r.id.startsWith("road-") && !r.id.startsWith("link-") && !r.id.startsWith("spare-")
+  );
+  if (rooms.length === 0) return undefined;
+  let h = 0;
+  for (let i = 0; i < agent.id.length; i++) h = (h * 31 + agent.id.charCodeAt(i)) >>> 0;
+  return rooms[h % rooms.length];
+}
+
 /** Desks belong to whoever is working at one: claimed when an agent starts, freed when it stops. */
 function updateSeat(world: World, agent: Agent): void {
   if (!NEEDS_DESK.includes(agent.state)) {
     agent.seat = undefined;
     return;
   }
-  const room = world.rooms.find((candidate) => candidate.id === agent.area);
+  const direct = world.rooms.find((candidate) => candidate.id === agent.area);
+  const room = direct ?? roomForAgent(world, agent);
   const inRoom = (seat: { x: number; y: number }): boolean =>
     Boolean(room) && seat.x >= (room as Room).x && seat.x < (room as Room).x + (room as Room).w && seat.y >= (room as Room).y && seat.y < (room as Room).y + (room as Room).h;
   // Moved to another room: this desk is no longer the right one.
@@ -282,7 +300,11 @@ function updateSeat(world: World, agent: Agent): void {
   agent.seat = undefined;
   const taken = new Set(world.agents.filter((other) => other !== agent && other.seat).map((other) => `${other.seat?.x},${other.seat?.y}`));
   const free = world.seats.filter((seat) => !taken.has(`${seat.x},${seat.y}`));
-  agent.seat = room ? free.find(inRoom) : free[0];
+  if (direct) {
+    agent.seat = free.find(inRoom);
+  } else {
+    agent.seat = (room ? free.find(inRoom) : undefined) ?? free[0];
+  }
 }
 
 /** Where an agent is standing, or heading to if it is walking. */
@@ -321,7 +343,7 @@ export function goalFor(world: World, agent: Agent): { x: number; y: number } | 
     case "blocked": {
       if (agent.seat) return agent.seat;
       // No free desk in the room they are working in: they stand in it anyway.
-      const room = world.rooms.find((candidate) => candidate.id === agent.area);
+      const room = roomForAgent(world, agent);
       if (room && room.w > 0 && room.h > 0) return freeTileNear(world, agent, { x: room.x + (room.w >> 1), y: room.y + (room.h >> 1) });
       return pick(world.spots.lounge);
     }

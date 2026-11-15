@@ -48,7 +48,7 @@ describe("the MCP server", () => {
   it("lists its tools and tells agents what to do, including about secrets", async () => {
     const c = await connectMcp();
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_finish_quest", "office_leave", "office_next_quest", "office_status", "office_update_quest", "office_view"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["office_add_quest", "office_audit", "office_finish_quest", "office_leave", "office_list_prompts", "office_next_quest", "office_report_verdict", "office_run_tests", "office_status", "office_submit_review", "office_update_quest", "office_view"]);
     expect(c.getInstructions()).toContain("secrets");
   });
 
@@ -295,7 +295,14 @@ describe("the office app", () => {
 
   it("saves a change from its own page, and cleans what it is given", async () => {
     expect(await put(JSON.stringify({ agents: [{ id: "Ada!", name: "Ada", state: "dancing" }], tasks: [{ title: "T", state: "nope" }], extra: "x" }), { "Content-Type": "application/json", Origin: base })).toBe(200);
-    expect(json(STATE)).toEqual({ agents: [{ id: "ada", name: "Ada", state: "idle" }], tasks: [{ title: "T", state: "todo" }], stats: { questsDone: 0 } });
+    const saved = json(STATE);
+    expect(saved.tasks).toEqual([{ title: "T", state: "todo" }]);
+    expect(saved.stats).toEqual({ questsDone: 0 });
+    expect(saved.agents).toHaveLength(1);
+    expect(saved.agents[0].id).toBe("ada");
+    expect(saved.agents[0].name).toBe("Ada");
+    expect(saved.agents[0].state).toBe("idle");
+    expect(typeof saved.agents[0].lastSeen).toBe("string");
   });
 
   it("refuses changes from another site, with no origin, or without JSON", async () => {
@@ -541,4 +548,29 @@ describe("the project's map", () => {
     expect(await send(JSON.stringify(map), base)).toBe(200);
     expect(json("kits/pixel-office/office-map.json").rooms[0].name).toBe("Renamed");
   }, 20000);
+});
+
+describe("blkc office work", () => {
+  const seed = (tasks: unknown[]) => writeFileSync(path.join(dir, STATE), JSON.stringify({ agents: [], tasks }));
+
+  it("picks up a quest, waits for it to be finished, and reports it", async () => {
+    seed([{ title: "Ship it", state: "todo", agent: "bot", by: "user" }]);
+    const proc = spawn(process.execPath, [CLI, "office", "work", "Bot", "--once", "--poll", "200"], { cwd: dir });
+    let out = "";
+    proc.stdout.on("data", (data) => { out += String(data); });
+    await new Promise<void>((resolve) => {
+      const check = () => { if (out.includes("Ship it")) resolve(); else setTimeout(check, 50); };
+      check();
+    });
+    blkc("office", "finish", "Bot");
+    await new Promise<void>((resolve) => proc.on("close", () => resolve()));
+    expect(out).toContain('"quest"');
+    expect(out).toContain('"finished"');
+  }, 10000);
+
+  it("says so when there is nothing to do", () => {
+    seed([]);
+    const r = blkc("office", "work", "Bot", "--once");
+    expect(r.out.trim()).toContain('"quest":null');
+  });
 });

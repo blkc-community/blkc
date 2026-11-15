@@ -23,6 +23,9 @@ import {
   safeParse,
   withHash,
 } from "@blkc-code/core";
+import { checkSignature, signHash, type Keyring, type LogbookSigner } from "./signing.js";
+
+export * from "./signing.js";
 
 // ============================================================================
 // Types
@@ -35,6 +38,16 @@ export const DEFAULT_LOGBOOK_PATH = "logbook/log.jsonl";
 export type LogbookConfig = {
   filePath?: string;
   algorithm?: string;
+  /** When set, every appended entry is signed with this key (story 7.2). */
+  signer?: LogbookSigner;
+}
+
+/** Options for checking signatures while verifying. */
+export type LogbookVerifyOptions = {
+  /** Trusted public keys. Without it, signatures aren't checked. */
+  keyring?: Keyring;
+  /** Fail entries that have no signature (BLKC-E403). Needs a keyring. */
+  requireSignatures?: boolean;
 }
 
 /** Input for appending a new Logbook entry */
@@ -52,6 +65,10 @@ export type LogbookAppendInput = {
 /** A single verification issue found during chain verification */
 export type LogbookVerificationIssue = {
   index: number;
+  /** 1-based line in the logbook file. */
+  line?: number;
+  /** BLKC-E4xx error code. */
+  code?: string;
   message: string;
   entry?: Partial<LogbookEntry>;
 }
@@ -60,6 +77,10 @@ export type LogbookVerificationIssue = {
 export type LogbookVerificationResult = {
   valid: boolean;
   issues: LogbookVerificationIssue[];
+  /** The first problem in the file, which is what an auditor needs first. */
+  firstIssue?: LogbookVerificationIssue;
+  /** How many entries carried a signature that checked out. */
+  signedEntries?: number;
   entries: LogbookEntry[];
   lastHash?: string;
 }
@@ -116,11 +137,13 @@ const toHashlessEntry = (input: LogbookAppendInput & { prevHash?: string }): Omi
 export class Logbook {
   readonly filePath: string;
   readonly algorithm: string;
+  private readonly signer?: LogbookSigner;
   private readonly lineEnding = "\n";
 
   constructor(config: LogbookConfig = {}) {
     this.filePath = path.resolve(config.filePath ?? DEFAULT_LOGBOOK_PATH);
     this.algorithm = config.algorithm ?? DEFAULT_ALGORITHM;
+    this.signer = config.signer;
   }
 
   /**
@@ -169,7 +192,9 @@ export class Logbook {
       prevHash,
     }) as LogbookEntry;
 
-    const entry = withHash(dropHashFields(normalized), prevHash, this.algorithm);
+    const hashed = withHash(dropHashFields(normalized), prevHash, this.algorithm) as LogbookEntry;
+    // The hash covers everything except the signature, so the signature is over the hash.
+    const entry: LogbookEntry = this.signer ? { ...hashed, signature: signHash(hashed.hash as string, this.signer) } : hashed;
     await appendFile(this.filePath, `${JSON.stringify(entry)}${this.lineEnding}`, {
       encoding: "utf8",
     });
@@ -233,16 +258,24 @@ export class Logbook {
    * - Each entry's prevHash matches the previous entry's hash
    * - The chain is continuous (no gaps)
    */
-  async verify(): Promise<LogbookVerificationResult> {
-    const entries = await this.readAll();
-    return this.verifyEntries(entries);
+  async verify(options: LogbookVerifyOptions = {}): Promise<LogbookVerificationResult> {
+    let entries: LogbookEntry[];
+    try {
+      entries = await this.readAll();
+    } catch (error) {
+      if (!(error instanceof LogbookCorruptionError)) throw error;
+      const issue = { index: error.line, line: error.line + 1, code: "BLKC-E400", message: `Line ${error.line + 1} is not a valid logbook entry.` };
+      return { valid: false, issues: [issue], firstIssue: issue, entries: [] };
+    }
+    return this.verifyEntries(entries, options);
   }
 
   /**
    * Verify a set of entries (without reading from file).
    */
-  verifyEntries(entries: LogbookEntry[]): LogbookVerificationResult {
+  verifyEntries(entries: LogbookEntry[], options: LogbookVerifyOptions = {}): LogbookVerificationResult {
     let prevHash: string | undefined;
+    let signedEntries = 0;
     const issues: LogbookVerificationIssue[] = [];
     const verifiedEntries: LogbookEntry[] = [];
 
@@ -256,6 +289,8 @@ export class Logbook {
       if (entry.hash !== computedHash) {
         issues.push({
           index: i,
+          line: i + 1,
+          code: "BLKC-E401",
           message: `Hash mismatch: expected ${computedHash}, got ${entry.hash}`,
           entry: { id: entry.id, hash: entry.hash, computedHash: computedHash } as unknown as Partial<LogbookEntry>,
         });
@@ -265,17 +300,30 @@ export class Logbook {
       if (entry.prevHash !== prevHash) {
         issues.push({
           index: i,
+          line: i + 1,
+          code: "BLKC-E402",
           message: `prevHash mismatch: expected ${prevHash || "none"}, got ${entry.prevHash || "none"}`,
           entry: { id: entry.id, prevHash: entry.prevHash, expectedPrevHash: prevHash } as unknown as Partial<LogbookEntry>,
         });
       }
 
+      if (options.keyring) {
+        if (entry.signature || options.requireSignatures) {
+          const check = checkSignature(entry, options.keyring);
+          if (check.ok) signedEntries++;
+          else issues.push({ index: i, line: i + 1, code: check.code, message: check.message });
+        }
+      }
+
       prevHash = entry.hash;
     }
 
+    const ordered = [...issues].sort((a, b) => a.index - b.index);
     return {
       valid: issues.length === 0,
-      issues,
+      issues: ordered,
+      firstIssue: ordered[0],
+      signedEntries,
       entries: verifiedEntries,
       lastHash: prevHash,
     };
@@ -320,10 +368,11 @@ export function createLogbook(config?: LogbookConfig): Logbook {
  */
 export async function verifyLogbook(
   filePath: string,
-  algorithm: string = DEFAULT_ALGORITHM
+  algorithm: string = DEFAULT_ALGORITHM,
+  options: LogbookVerifyOptions = {}
 ): Promise<LogbookVerificationResult> {
   const logbook = new Logbook({ filePath, algorithm });
-  return logbook.verify();
+  return logbook.verify(options);
 }
 
 /**

@@ -135,6 +135,23 @@
         ]
       }
     },
+    "mcpApp": {
+      "type": "object",
+      "properties": {
+        "resourceUri": {
+          "type": "string",
+          "pattern": "^ui:\\/\\/[A-Za-z0-9._~/-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "resourceUri",
+        "title"
+      ]
+    },
     "kind": {
       "type": "string",
       "const": "capability"
@@ -255,6 +272,57 @@
         },
         "required": [
           "id"
+        ]
+      }
+    },
+    "evals": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "metric": {
+            "type": "string",
+            "minLength": 1
+          },
+          "score": {
+            "type": "number"
+          },
+          "baseline": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "score"
+            ]
+          },
+          "latencyP50Ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "costPer1k": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ranAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "metric",
+          "score"
         ]
       }
     },

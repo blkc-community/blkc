@@ -9,3 +9,5 @@
 export * from "./state.js";
 export * from "./store.js";
 export * from "./server.js";
+export * from "./presentation.js";
+export * from "./verify-command.js";
